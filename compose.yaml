@@ -1,0 +1,90 @@
+# compose.yaml — DocuGuard
+#
+# QUẢN LÝ:
+# - docuguard-client (Next.js frontend, cổng 3000)
+# - docuguard-server (NestJS backend, cổng 3001)
+#
+# KHÔNG QUẢN LÝ (đã chạy sẵn, dùng external network):
+# - mongodb  → mongo:8.2, cổng 27017
+# - n8n      → docker.n8n.io/n8nio/n8n, cổng 5678
+#
+# KHỞI ĐỘNG:
+# docker compose up -d --build
+#
+# XEM LOG:
+# docker compose logs -f
+# docker compose logs -f server
+# docker compose logs -f client
+#
+# DỪNG:
+# docker compose down   ← chỉ dừng, KHÔNG xóa volume
+#
+# XEM THÊM: docs/DOCKER_GUIDE.md
+
+services:
+  client:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: docuguard-client
+    container_name: docuguard-client
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # NEXT_PUBLIC_* được nhúng vào bundle khi build
+      # Trỏ đến địa chỉ backend mà BROWSER có thể truy cập
+      # → dùng localhost vì browser chạy ở máy host, không trong Docker
+      - NEXT_PUBLIC_API_URL=http://localhost:3001
+    depends_on:
+      - server
+    networks:
+      - docuguard-network
+
+  server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: docuguard-server
+    container_name: docuguard-server
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+
+      # MongoDB: dùng tên container 'mongodb' vì cùng network
+      - MONGODB_URI=mongodb://mongodb:27017/docuguard
+
+      # n8n: dùng tên container 'n8n' vì cùng network
+      - N8N_BASE_URL=http://n8n:5678
+
+      # QUAN TRỌNG: Thay bằng secret thực trước khi production
+      # Tạo bằng: openssl rand -hex 32
+      - N8N_WEBHOOK_SECRET=change-me-in-production
+
+      # CORS: cho phép frontend (browser tại localhost:3000)
+      - FRONTEND_ORIGIN=http://localhost:3000
+
+      # Thư mục lưu tài liệu (mount từ volume)
+      - DOCUMENT_STORAGE_PATH=/app/storage/documents
+
+    volumes:
+      # Volume để lưu tài liệu upload, không mất khi restart container
+      - document-storage:/app/storage/documents
+
+    networks:
+      - docuguard-network
+
+# Volume cho tài liệu upload
+volumes:
+  document-storage:
+    name: docuguard-document-storage
+
+# Dùng external network — phải tạo trước bằng:
+# docker network create docuguard-network
+networks:
+  docuguard-network:
+    external: true
+    name: docuguard-network

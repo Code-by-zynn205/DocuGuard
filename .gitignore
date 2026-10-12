@@ -1,0 +1,28 @@
+# Môi trường và bí mật
+.env
+.env.local
+.env.*.local
+
+# Thư mục build
+node_modules/
+dist/
+.next/
+out/
+build/
+
+# Log
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+*.pid
