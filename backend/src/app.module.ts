@@ -18,17 +18,12 @@
 
 import { Module } from '@nestjs/common';
 import { HealthModule } from './modules/health/health.module.js';
+import { DatabaseModule } from './database/database.module.js';
 
 @Module({
   imports: [
-    // HealthModule: cung cấp endpoint GET /health
     HealthModule,
-
-    // TODO (Giai đoạn 1): Uncomment sau khi cài @nestjs/mongoose
-    // DatabaseModule,
-
-    // TODO (Giai đoạn 5): Uncomment khi bắt đầu tích hợp n8n
-    // N8nModule,
+    DatabaseModule,
   ],
 })
 export class AppModule {}

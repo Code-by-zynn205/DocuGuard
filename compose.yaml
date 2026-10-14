@@ -54,8 +54,8 @@ services:
       - NODE_ENV=production
       - PORT=3001
 
-      # MongoDB: dùng tên container 'mongodb' vì cùng network
-      - MONGODB_URI=mongodb://mongodb:27017/docuguard
+      # MongoDB Atlas Cloud Connection
+      - MONGODB_URI=mongodb+srv://docuguard:123@cluster0.9wkr8fl.mongodb.net/docuguard?retryWrites=true&w=majority&appName=Cluster0
 
       # n8n: dùng tên container 'n8n' vì cùng network
       - N8N_BASE_URL=http://n8n:5678
@@ -74,6 +74,18 @@ services:
       # Volume để lưu tài liệu upload, không mất khi restart container
       - document-storage:/app/storage/documents
 
+    networks:
+      - docuguard-network
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: docuguard-mongo-express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_URL=mongodb://admin:123@mongodb:27017/?authSource=admin
+      - ME_CONFIG_BASICAUTH=false
     networks:
       - docuguard-network
 
