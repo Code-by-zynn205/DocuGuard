@@ -13,6 +13,19 @@
  * - Production PHẢI cung cấp đầy đủ biến môi trường.
  */
 
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+// Tự động nạp file .env khi chạy ngoài Docker
+try {
+  const envPath = resolve(process.cwd(), '.env');
+  if (existsSync(envPath) && typeof process.loadEnvFile === 'function') {
+    process.loadEnvFile(envPath);
+  }
+} catch {
+  // Bỏ qua nếu môi trường đã có sẵn biến
+}
+
 export const appConfig = {
   // Môi trường chạy: 'development' | 'production' | 'test'
   nodeEnv: process.env.NODE_ENV ?? 'development',
@@ -35,6 +48,22 @@ export const appConfig = {
 
   // Thư mục lưu trữ tệp tài liệu trên server
   documentStoragePath: process.env.DOCUMENT_STORAGE_PATH ?? './storage/documents',
+
+  // ─── JWT ───────────────────────────────────────────────────────
+  // Secret ký Access Token (phải đủ dài và ngẫu nhiên khi production)
+  jwtSecret: process.env.JWT_SECRET ?? 'docuguard-access-secret-change-in-production',
+
+  // Secret ký Refresh Token (dùng secret khác với Access Token)
+  jwtRefreshSecret: process.env.JWT_REFRESH_SECRET ?? 'docuguard-refresh-secret-change-in-production',
+
+  // Thời gian sống Access Token (dạng string cho JwtModule: '15m', '1h', ...)
+  jwtAccessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? '15m',
+
+  // Thời gian sống Refresh Token
+  jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '7d',
+
+  // Thời gian sống Access Token (dạng số giây — trả về cho client)
+  jwtAccessExpiresInSeconds: parseInt(process.env.JWT_ACCESS_EXPIRES_IN_SECONDS ?? '900', 10),
 };
 
 // Kiểu TypeScript của config — dùng khi cần inject vào service

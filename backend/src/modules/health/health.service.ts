@@ -6,13 +6,13 @@
 
 import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import { Connection } from 'mongoose';
+import mongoose from 'mongoose';
 import { appConfig } from '../../config/app.config.js';
 
 @Injectable()
 export class HealthService {
   constructor(
-    @InjectConnection() private readonly connection: Connection,
+    @InjectConnection() private readonly connection: mongoose.Connection,
   ) {}
 
   check() {

@@ -24,7 +24,7 @@ async function seedFull() {
       {
         _id: userId,
         email: 'admin@docuguard.internal',
-        passwordHash: '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyGQVvS7v.O6kEaNqI0uGz3.example',
+        passwordHash: '$2b$10$vEaXAJKHrERxbnW/bwl8B.hldorKwHUKDelPq1i8ppSXdNnuEL1Wu', // Admin@123456
         fullName: 'Nguyễn Văn Quản Trị',
         department: 'Công Nghệ Thông Tin',
         role: 'admin',
@@ -35,7 +35,7 @@ async function seedFull() {
       {
         _id: reviewerId,
         email: 'phapche@docuguard.internal',
-        passwordHash: '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyGQVvS7v.O6kEaNqI0uGz3.example',
+        passwordHash: '$2b$10$vEaXAJKHrERxbnW/bwl8B.hldorKwHUKDelPq1i8ppSXdNnuEL1Wu', // Admin@123456
         fullName: 'Trần Thị Thẩm Định',
         department: 'Pháp Chế',
         role: 'reviewer',
