@@ -1,0 +1,19 @@
+# Thư mục thư viện (Không đẩy lên GitHub)
+node_modules/
+.pnpm-store/
+
+# Thư mục build
+.next/
+dist/
+build/
+
+# Các file cấu hình chứa thông tin bảo mật (API Key, Mongo URI,...)
+.env
+.env.local
+.env.production
+
+# Log và các file tạm của hệ thống
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.DS_Store
