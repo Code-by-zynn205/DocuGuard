@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # DocuGuard — Kho Tài Liệu Tự Giám Sát và Tự Phục Hồi
 
 > Nền tảng quản lý tài liệu doanh nghiệp có khả năng tự giám sát tình trạng tài liệu, phát hiện bất thường, đánh giá rủi ro, tự động điều phối xử lý sự cố qua n8n và hỗ trợ khôi phục tài liệu an toàn.
@@ -181,3 +182,41 @@ docker compose logs -f client
 - **Giai đoạn 8**: Xây dựng Audit Log và giám sát workflow.
 - **Giai đoạn 9**: Hoàn thiện giao diện quản trị và dashboard.
 - **Giai đoạn 10**: Kiểm thử, bảo mật và triển khai production.
+=======
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+>>>>>>> c6d1494 (Feat: Cập nhật hoàn thiện toàn bộ giao diện Frontend DocuGuard - Huynh Thanh Thuan (16/10/2026 21:41))
