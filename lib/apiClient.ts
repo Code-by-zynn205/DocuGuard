@@ -1,27 +1,20 @@
-'use client';
-
+// src/lib/apiClient.ts
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Interceptor bóc tách data khi Backend dùng ResponseInterceptor
+// Thêm interceptor nếu cần bắt lỗi chung
 apiClient.interceptors.response.use(
-  (response) => {
-    // Nếu Backend bọc kết quả trong { success: true, data: ... }
-    if (response.data && response.data.data !== undefined) {
-      return { ...response, data: response.data.data };
-    }
-    return response;
-  },
-  (error) => Promise.reject(error)
+  (response) => response,
+  (error) => {
+    console.error('API Error:', error.response?.data || error.message);
+    return Promise.reject(error);
+  }
 );
-
-export default apiClient;
