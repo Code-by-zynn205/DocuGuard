@@ -1,0 +1,187 @@
+{
+  "name": "DocuGuard - Document Health Scan",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "document-health-scan",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [180, 240],
+      "webhookId": "document-health-scan"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "node-cron-trigger",
+      "name": "Daily Cron Trigger (2 AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [180, 420]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/documents",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "node-get-documents",
+      "name": "Fetch All Documents",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const docs = $input.all().map(item => item.json);\nconst results = [];\nconst now = new Date().getTime();\nconst thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;\n\nfor (const doc of docs) {\n  let needsIncident = false;\n  let issues = [];\n  let severity = 'low';\n\n  if (doc.integrityStatus === 'tampered' || doc.integrityStatus === 'missing') {\n    needsIncident = true;\n    severity = 'critical';\n    issues.push(`Xâm phạm toàn vẹn tệp: ${doc.integrityStatus}`);\n  }\n\n  if (doc.healthScore < 50) {\n    needsIncident = true;\n    severity = 'critical';\n    issues.push(`Điểm sức khỏe nguy hiểm: ${doc.healthScore}/100`);\n  } else if (doc.healthScore < 80) {\n    issues.push(`Điểm sức khỏe cảnh báo: ${doc.healthScore}/100`);\n  }\n\n  if (doc.expiresAt) {\n    const exp = new Date(doc.expiresAt).getTime();\n    if (exp < now) {\n      needsIncident = true;\n      severity = severity === 'critical' ? 'critical' : 'high';\n      issues.push('Tài liệu đã quá hạn hiệu lực');\n    } else if (exp - now <= thirtyDaysMs) {\n      issues.push('Tài liệu sắp hết hạn trong 30 ngày');\n    }\n  }\n\n  results.push({\n    json: {\n      documentId: doc._id,\n      title: doc.title,\n      healthScore: doc.healthScore,\n      healthStatus: doc.healthStatus,\n      integrityStatus: doc.integrityStatus,\n      needsIncident,\n      severity,\n      issues,\n      issuesSummary: issues.join('; ')\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "node-evaluate-health",
+      "name": "Evaluate Health Rules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.needsIncident }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "node-check-needs-incident",
+      "name": "Check Needs Incident",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [860, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/incidents",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"documentId\": \"{{ $json.documentId }}\",\n  \"title\": \"Cảnh báo tự động: {{ $json.title }}\",\n  \"description\": \"n8n Health Scan phát hiện bất thường: {{ $json.issuesSummary }}\",\n  \"severity\": \"{{ $json.severity }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "node-create-incident",
+      "name": "Auto Create Incident in Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"Quét sức khỏe tài liệu hoàn tất thành công bởi n8n\",\n  \"timestamp\": \"{{ $now.toISO() }}\",\n  \"totalEvaluated\": {{ $items().length }}\n}",
+        "options": {}
+      },
+      "id": "node-respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, 420]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Cron Trigger (2 AM)": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Documents": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Health Rules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Health Rules": {
+      "main": [
+        [
+          {
+            "node": "Check Needs Incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Needs Incident": {
+      "main": [
+        [
+          {
+            "node": "Auto Create Incident in Backend",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto Create Incident in Backend": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "name": "DocuGuard - Incident Auto-Resolution",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "incident-resolution",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-incident-webhook",
+      "name": "Incident Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [180, 260],
+      "webhookId": "incident-resolution"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\n\nconst isTampered = Boolean(payload.actualHash && payload.expectedHash && payload.actualHash !== payload.expectedHash);\nconst severity = isTampered ? 'critical' : (payload.severity || 'high');\nconst autoRecover = isTampered && Boolean(payload.documentId);\n\nreturn [{\n  json: {\n    ...payload,\n    severity,\n    autoRecover,\n    incidentTitle: payload.title || (isTampered ? `Cảnh báo vi phạm toàn vẹn: ${payload.documentId}` : 'Sự cố DocuGuard mới'),\n    incidentDescription: payload.description || (isTampered ? `Mã băm thực tế (${payload.actualHash}) không khớp mã băm gốc (${payload.expectedHash}). Kích hoạt tự động khôi phục an toàn.` : 'Phát hiện sự cố từ hệ thống giám sát.')\n  }\n}];"
+      },
+      "id": "node-classify-incident",
+      "name": "Classify & Prepare Incident",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/incidents",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"documentId\": \"{{ $json.documentId }}\",\n  \"title\": \"{{ $json.incidentTitle }}\",\n  \"description\": \"{{ $json.incidentDescription }}\",\n  \"severity\": \"{{ $json.severity }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "node-save-incident",
+      "name": "Register Incident in Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 260]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $('Classify & Prepare Incident').first().json.autoRecover }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "node-check-autorecover",
+      "name": "Check If Auto-Recover Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/documents/{{ $('Classify & Prepare Incident').first().json.documentId }}/recover",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"reason\": \"n8n Auto-Resolution: Tự động phục hồi tệp từ bản sao lưu an toàn sau khi phát hiện lệch mã hash SHA-256\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-execute-recovery",
+      "name": "Execute Safe Recovery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1140, 160]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"completed\",\n  \"incidentRegistered\": true,\n  \"autoRecoverTriggered\": {{ $('Classify & Prepare Incident').first().json.autoRecover }},\n  \"timestamp\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "node-incident-respond",
+      "name": "Respond to Incident Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1380, 260]
+    }
+  ],
+  "connections": {
+    "Incident Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Classify & Prepare Incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify & Prepare Incident": {
+      "main": [
+        [
+          {
+            "node": "Register Incident in Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register Incident in Backend": {
+      "main": [
+        [
+          {
+            "node": "Check If Auto-Recover Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Auto-Recover Needed": {
+      "main": [
+        [
+          {
+            "node": "Execute Safe Recovery",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Incident Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Safe Recovery": {
+      "main": [
+        [
+          {
+            "node": "Respond to Incident Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}
