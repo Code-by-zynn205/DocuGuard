@@ -20,7 +20,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/documents/{{ $json.documentId }}",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/documents/{{ $json.body ? $json.body.documentId : $json.documentId }}",
         "options": {
           "timeout": 10000
         }

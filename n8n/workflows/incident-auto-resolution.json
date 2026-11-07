@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const payload = $input.first().json;\n\nconst isTampered = Boolean(payload.actualHash && payload.expectedHash && payload.actualHash !== payload.expectedHash);\nconst severity = isTampered ? 'critical' : (payload.severity || 'high');\nconst autoRecover = isTampered && Boolean(payload.documentId);\n\nreturn [{\n  json: {\n    ...payload,\n    severity,\n    autoRecover,\n    incidentTitle: payload.title || (isTampered ? `Cảnh báo vi phạm toàn vẹn: ${payload.documentId}` : 'Sự cố DocuGuard mới'),\n    incidentDescription: payload.description || (isTampered ? `Mã băm thực tế (${payload.actualHash}) không khớp mã băm gốc (${payload.expectedHash}). Kích hoạt tự động khôi phục an toàn.` : 'Phát hiện sự cố từ hệ thống giám sát.')\n  }\n}];"
+        "jsCode": "const raw = $input.first().json;\nconst payload = raw.body ? raw.body : raw;\n\nconst isTampered = Boolean(payload.actualHash && payload.expectedHash && payload.actualHash !== payload.expectedHash);\nconst severity = isTampered ? 'critical' : (payload.severity || 'high');\nconst autoRecover = isTampered && Boolean(payload.documentId);\n\nreturn [{\n  json: {\n    ...payload,\n    severity,\n    autoRecover,\n    incidentTitle: payload.title || (isTampered ? `Cảnh báo vi phạm toàn vẹn: ${payload.documentId}` : 'Sự cố DocuGuard mới'),\n    incidentDescription: payload.description || (isTampered ? `Mã băm thực tế (${payload.actualHash}) không khớp mã băm gốc (${payload.expectedHash}). Kích hoạt tự động khôi phục an toàn.` : 'Phát hiện sự cố từ hệ thống giám sát.')\n  }\n}];"
       },
       "id": "node-classify-incident",
       "name": "Classify & Prepare Incident",
@@ -47,12 +47,23 @@
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "value1": "={{ $('Classify & Prepare Incident').first().json.autoRecover }}",
-              "value2": true
+              "id": "c1",
+              "leftValue": "={{ $('Classify & Prepare Incident').first().json.autoRecover }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
-          ]
+          ],
+          "combinator": "and"
         }
       },
       "id": "node-check-autorecover",
