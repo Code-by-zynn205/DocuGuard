@@ -5,6 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "incident-resolution",
+        "responseMode": "responseNode",
         "options": {
           "responseCode": 200
         }
