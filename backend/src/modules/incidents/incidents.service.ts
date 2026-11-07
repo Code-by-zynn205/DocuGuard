@@ -28,13 +28,23 @@ export class IncidentsService {
       }
     }
 
+    const severityRaw = dto.severity ? String(dto.severity).toLowerCase() : 'medium';
+    const severity = Object.values(IncidentSeverity).includes(severityRaw as IncidentSeverity)
+      ? (severityRaw as IncidentSeverity)
+      : IncidentSeverity.MEDIUM;
+
+    const typeRaw = dto.type ? String(dto.type).toLowerCase() : 'low_health_score';
+    const type = Object.values(IncidentType).includes(typeRaw as IncidentType)
+      ? (typeRaw as IncidentType)
+      : IncidentType.LOW_HEALTH_SCORE;
+
     const incident = await this.incidentModel.create({
       incidentCode,
       documentId: documentObjectId,
       title: dto.title,
       description: dto.description,
-      severity: dto.severity || IncidentSeverity.MEDIUM,
-      type: dto.type || IncidentType.LOW_HEALTH_SCORE,
+      severity,
+      type,
       status: IncidentStatus.OPEN,
       assignedTo: dto.assignedTo && Types.ObjectId.isValid(dto.assignedTo) ? new Types.ObjectId(dto.assignedTo) : undefined,
       timeline: [
