@@ -1,0 +1,405 @@
+{
+  "name": "Automated Invoice Parser & Audit Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "update",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Search files and folders').item.json.id }}",
+          "mode": "id"
+        },
+        "newUpdatedFileName": "={{ $json.docType }}_{{ $json.supplier_name }}_{{ $json.issue_date }}.pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        944,
+        160
+      ],
+      "id": "d923abd0-24e9-4b15-914f-06b9533333ad",
+      "name": "Update file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Ur21iznf6C6noFWZ",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -128,
+        160
+      ],
+      "id": "116a0847-5792-48ad-954e-f9bd64879992",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "'1c2pSqJGDBL-wdwjqC3lg85krgHe0yNSR' in parents and mimeType = 'application/pdf' and trashed = false",
+        "filter": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        80,
+        160
+      ],
+      "id": "87f8cdf8-e90d-4763-b36c-798cc8da53c4",
+      "name": "Search files and folders",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Ur21iznf6C6noFWZ",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        304,
+        160
+      ],
+      "id": "d2508eff-f32c-46ea-a4a8-99aafef104dd",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Ur21iznf6C6noFWZ",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Bạn là một chuyên gia kế toán bóc tách dữ liệu hóa đơn. \nHãy đọc dữ liệu văn bản từ file PDF được cung cấp và trích xuất ra định dạng JSON duy nhất (không kèm lời giải thích hay văn bản thừa):\n\n{\n  \"supplier_name\": \"Tên nhà cung cấp / đơn vị bán\",\n  \"issue_date\": \"Ngày phát hành hóa đơn (YYYY-MM-DD)\",\n  \"total_amount\": 0 (tổng tiền thanh toán dạng số),\n  \"docType\": \"HOA_DON\",\n  \"is_suspicious\": false (trả về true nếu thông tin mờ, nghi ngờ giả mạo hoặc sai mã số thuế, ngược lại trả về false)\n}\n\nNội dung file PDF:\n{{ $json.data }}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        528,
+        160
+      ],
+      "id": "49a87b85-587c-439b-9620-4e7c0096593e",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        528,
+        352
+      ],
+      "id": "dd2d9e5a-ce2d-487e-bc44-068ad21a3885",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "ilibw2QHnLukR7l0",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Basic LLM Chain').item.json.is_suspicious }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "4da20c65-034d-4774-94ca-e4cb5c7d8c22"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Hóa đơn rủi ro."
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.5,
+      "position": [
+        1168,
+        160
+      ],
+      "id": "4da02149-a7ac-434a-b987-61a48a629776",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1k7zG_hg43F73PfDiVIA2h8vc_wZ4QGkTb3LRpHRrVzc",
+          "mode": "list",
+          "cachedResultName": "DMS_Audit_Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1k7zG_hg43F73PfDiVIA2h8vc_wZ4QGkTb3LRpHRrVzc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1710512412,
+          "mode": "list",
+          "cachedResultName": "DMS_Audit_Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1k7zG_hg43F73PfDiVIA2h8vc_wZ4QGkTb3LRpHRrVzc/edit#gid=1710512412"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Thời Gian Xử Lý": "={{ $now.format('yyyy-MM-dd HH:mm:ss') }}",
+            "Loại Tài Liệu": "={{ $('Basic LLM Chain').item.json.docType }}",
+            "Tên Công Ty": "={{ $('Basic LLM Chain').item.json.supplier_name }}",
+            "Ngày Chứng Từ": "={{ $('Basic LLM Chain').item.json.issue_date }}",
+            "Tên File Mới": "={{ $('Basic LLM Chain').item.json.docType }}_{{ $('Basic LLM Chain').item.json.supplier_name }}_{{ $('Basic LLM Chain').item.json.issue_date }}.pdf"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Thời Gian Xử Lý",
+              "displayName": "Thời Gian Xử Lý",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Loại Tài Liệu",
+              "displayName": "Loại Tài Liệu",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tên Công Ty",
+              "displayName": "Tên Công Ty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Ngày Chứng Từ",
+              "displayName": "Ngày Chứng Từ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tên File Mới",
+              "displayName": "Tên File Mới",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1392,
+        160
+      ],
+      "id": "c7654737-52a6-4fa5-9340-b053ef6e6e03",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "uxXtPiYopDQFmSL0",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "thuanht.23ite@vku.udn.vn",
+        "subject": "=[HÓA ĐƠN THÀNH CÔNG] - {{ $('Basic LLM Chain').item.json.supplier_name }}",
+        "message": "=✅ ĐÃ NHẬP SỔ HÓA ĐƠN THÀNH CÔNG\n• Nhà cung cấp: {{ $('Basic LLM Chain').item.json.supplier_name }}\n• Ngày phát hành: {{ $('Basic LLM Chain').item.json.issue_date }}\n• Tổng tiền: {{ $('Basic LLM Chain').item.json.total_amount }} VNĐ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1600,
+        160
+      ],
+      "id": "ea7c2904-55f1-447f-84e7-185c1c129251",
+      "name": "Send a message",
+      "webhookId": "c6cb2cfa-ba27-4d16-96e1-6fc93097a7fb",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "LKIdWmE1T3Hyw6fi",
+          "name": "Gmail account 3"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Update file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update file": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "c77023a3-01e4-45c4-8917-98aee0bad016",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3e72f4e644534f11c9f7a3521b34089c267a8b60df3908b85bcb0a371420596f"
+  },
+  "nodeGroups": [],
+  "id": "ZsrnhKFUecGgbQVj",
+  "tags": []
+}
