@@ -1,0 +1,386 @@
+{
+  "name": "classification documents",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "134AXW50yGjMjaiZDkMxbsEbYY3Q6SkgA",
+          "mode": "list",
+          "cachedResultName": "01_INBOX",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/134AXW50yGjMjaiZDkMxbsEbYY3Q6SkgA"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        -16
+      ],
+      "id": "109aeb3a-fdfa-4a3c-82c9-ff6144949234",
+      "name": "Trigger: New Document Inbox",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Ur21iznf6C6noFWZ",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -64,
+        -16
+      ],
+      "id": "b2e070eb-aaa6-4b53-a935-69d0784e0b6c",
+      "name": "GDrive: Download PDF File",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Ur21iznf6C6noFWZ",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.2,
+      "position": [
+        160,
+        -16
+      ],
+      "id": "59d4de9a-044e-4ffa-af61-4d45bed954d9",
+      "name": "PDF: Extract Raw Text"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Bạn là một trợ lý quản lý tài liệu chuyên nghiệp. Hãy đọc văn bản tài liệu dưới đây và trích xuất 3 thông tin chính dưới định dạng JSON duy nhất (không kèm lời giải thích hay markdown codeblock):\n\n{\n  \"doc_type\": \"HoaDon\" hoặc \"HopDong\" hoặc \"BaoCao\",\n  \"company_name\": \"TenCongTyVietLienKhongDau\",\n  \"issue_date\": \"YYYY-MM-DD\"\n}\n\nVăn bản tài liệu:\n{{ $json.data }}",
+        "messages": {
+          "messageValues": []
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        384,
+        -16
+      ],
+      "id": "d7d3ba74-33ff-4223-b39d-277190e8f3f5",
+      "name": "AI: Analyze & Extract Metadata"
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwen3.8-27b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        384,
+        160
+      ],
+      "id": "19af8a24-cb0f-4061-909c-81c429bbe672",
+      "name": "Groq LLM",
+      "credentials": {
+        "groqApi": {
+          "id": "ilibw2QHnLukR7l0",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lấy kết quả từ AI trả về\nconst rawText = $input.first().json.text;\nconst aiOutput = JSON.parse(rawText);\n\nconst docType = aiOutput.doc_type || \"BaoCao\";\nconst company = aiOutput.company_name || \"DoiTac\";\nconst date = aiOutput.issue_date || \"2026-11-11\";\n\n// Đổi tên file theo chuẩn: [Loai]_TenCongTy_Ngay.pdf\nconst newFileName = `[${docType}]_${company}_${date}.pdf`;\nconst fileId = $('Trigger: New Document Inbox').item.json.id;\n\nreturn {\n  json: {\n    docType: docType,\n    newFileName: newFileName,\n    fileId: fileId\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        -16
+      ],
+      "id": "1d60596d-e3ae-454f-8888-94e91b8ef8b6",
+      "name": "Code: Standardize & Rename"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.docType }}",
+                    "rightValue": "HoaDon",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "c6b39a03-5e1a-4000-8719-fd19d347f2e1"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "HoaDon"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "id": "d5041cae-2a6c-422f-aa53-8e70cd5a26f0",
+                    "leftValue": "={{ $json.docType }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "HopDong"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "id": "e28eec2b-3de2-4686-867e-e5ee4102d0cb",
+                    "leftValue": "={{ $json.docType }}",
+                    "rightValue": "OTHER",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "BaoCao"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "id": "a23081ff-890f-4e73-8738-09c14440d24c",
+                    "leftValue": "={{ $json.docType }}",
+                    "rightValue": "BaoCao",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "BaoCao"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.5,
+      "position": [
+        976,
+        -32
+      ],
+      "id": "c578ebd7-8049-4adc-b59c-bf3debbaf7d6",
+      "name": "Router: Document Type"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.fileId }}",
+          "mode": "id"
+        },
+        "newUpdatedFileName": "={{ $json.newFileName }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1328,
+        -32
+      ],
+      "id": "1890d2c7-f8f6-4ac7-98b9-6acff3f9590d",
+      "name": "GDrive: Move & Update File",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Ur21iznf6C6noFWZ",
+          "name": "Google Drive account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Trigger: New Document Inbox": {
+      "main": [
+        [
+          {
+            "node": "GDrive: Download PDF File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GDrive: Download PDF File": {
+      "main": [
+        [
+          {
+            "node": "PDF: Extract Raw Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF: Extract Raw Text": {
+      "main": [
+        [
+          {
+            "node": "AI: Analyze & Extract Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Analyze & Extract Metadata": {
+      "main": [
+        [
+          {
+            "node": "Code: Standardize & Rename",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI: Analyze & Extract Metadata",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Standardize & Rename": {
+      "main": [
+        [
+          {
+            "node": "Router: Document Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router: Document Type": {
+      "main": [
+        [
+          {
+            "node": "GDrive: Move & Update File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GDrive: Move & Update File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GDrive: Move & Update File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GDrive: Move & Update File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "e6c3fd56-54c6-4a67-b3f4-554403a4e7ce",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3e72f4e644534f11c9f7a3521b34089c267a8b60df3908b85bcb0a371420596f"
+  },
+  "nodeGroups": [],
+  "id": "2IEECwYeYd6skyi3",
+  "tags": []
+}
