@@ -25,6 +25,12 @@ export function proxy(request: NextRequest) {
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   const role = request.cookies.get(AUTH_ROLE_COOKIE_NAME)?.value;
 
+  if (pathname === ROUTES.HOME) {
+    return NextResponse.redirect(
+      new URL(token ? ROUTES.DASHBOARD : ROUTES.LOGIN, request.url),
+    );
+  }
+
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
@@ -53,6 +59,7 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/',
     '/login',
     '/dashboard/:path*',
     '/documents/:path*',
