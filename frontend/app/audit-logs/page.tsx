@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Check,
   Code2,
@@ -8,6 +8,7 @@ import {
   Download,
   Filter,
   History,
+  RefreshCw,
   ShieldAlert,
   ShieldCheck,
   Terminal,
@@ -76,11 +77,32 @@ function escapeCsvCell(value: unknown): string {
 }
 
 export default function AuditLogsPage() {
-  const { data: logs, loading, isMock } = useApi<AuditLog[]>('/audit-logs');
+  const {
+    data: logs,
+    loading,
+    isMock,
+    refetch,
+  } = useApi<AuditLog[]>('/audit-logs');
 
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [secondsLeft, setSecondsLeft] = useState(30);
   const [actionFilter, setActionFilter] = useState<ActionCategory>('ALL');
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [copiedPayload, setCopiedPayload] = useState(false);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const timer = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          void refetch();
+          return 30;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [autoRefresh, refetch]);
 
   const filteredLogs = useMemo(() => {
     const list = logs ?? [];
@@ -265,15 +287,57 @@ export default function AuditLogsPage() {
           </p>
         </div>
 
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={handleExportCsv}
-          disabled={filteredLogs.length === 0}
-          leftIcon={<Download className="h-4 w-4" />}
-        >
-          Export CSV
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setAutoRefresh((prev) => !prev);
+              setSecondsLeft(30);
+            }}
+            className={[
+              'inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-medium transition-colors cursor-pointer',
+              autoRefresh
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300',
+            ].join(' ')}
+          >
+            <span className="relative flex h-2 w-2">
+              {autoRefresh && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+              )}
+              <span
+                className={`relative inline-flex h-2 w-2 rounded-full ${
+                  autoRefresh ? 'bg-emerald-500' : 'bg-slate-400'
+                }`}
+              />
+            </span>
+            <span>
+              {autoRefresh ? `Auto-refresh (${secondsLeft}s)` : 'Auto-refresh: Tắt'}
+            </span>
+          </button>
+
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => {
+              setSecondsLeft(30);
+              void refetch();
+            }}
+            leftIcon={<RefreshCw className="h-4 w-4" />}
+          >
+            Làm mới
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={handleExportCsv}
+            disabled={filteredLogs.length === 0}
+            leftIcon={<Download className="h-4 w-4" />}
+          >
+            Export CSV
+          </Button>
+        </div>
       </div>
 
       {/* Stat Cards */}

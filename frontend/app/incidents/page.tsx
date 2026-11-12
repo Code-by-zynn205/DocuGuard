@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -10,42 +10,43 @@ import {
   ExternalLink,
   FileWarning,
   Filter,
+  RefreshCw,
   SearchCheck,
   ShieldAlert,
   ShieldCheck,
-} from 'lucide-react';
-import { StatCard } from '@/components/common/StatCard';
-import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
-import { Modal } from '@/components/common/Modal';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ROUTES } from '@/constants';
-import { useApi } from '@/hooks/useApi';
-import { apiClient } from '@/lib/api';
+} from "lucide-react";
+import { StatCard } from "@/components/common/StatCard";
+import { DataTable, type DataTableColumn } from "@/components/common/DataTable";
+import { Modal } from "@/components/common/Modal";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { ROUTES } from "@/constants";
+import { useApi } from "@/hooks/useApi";
+import { apiClient } from "@/lib/api";
 import type {
   Document,
   Incident,
   IncidentSeverity,
   IncidentStatus,
-} from '@/types';
+} from "@/types";
 
 const STATUS_UI_LABELS: Record<IncidentStatus, string> = {
-  open: 'Open',
-  in_progress: 'Investigating',
-  resolved: 'Resolved',
-  closed: 'Closed',
+  open: "Open",
+  in_progress: "Investigating",
+  resolved: "Resolved",
+  closed: "Closed",
 };
 
 function formatDateTime(value?: string): string {
-  if (!value) return '—';
+  if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(date);
 }
 
@@ -56,52 +57,52 @@ function buildAiAuditSummary(incident: Incident): {
   recommendation: string;
 } {
   switch (incident.type) {
-    case 'integrity_violation':
+    case "integrity_violation":
       return {
         confidence: 96,
         rootCause:
-          'Phát hiện thay đổi nội dung tệp trực tiếp trên vùng lưu trữ mà không đi qua quy trình cập nhật phiên bản (DocumentVersion). Mã băm SHA-256 thực tế lệch hoàn toàn so với bản sao lưu gốc.',
+          "Phát hiện thay đổi nội dung tệp trực tiếp trên vùng lưu trữ mà không đi qua quy trình cập nhật phiên bản (DocumentVersion). Mã băm SHA-256 thực tế lệch hoàn toàn so với bản sao lưu gốc.",
         impact:
-          'Nguy cơ giả mạo chứng từ kiểm toán hoặc bị mã độc/nhân sự trái phép chỉnh sửa nội dung nhạy cảm.',
+          "Nguy cơ giả mạo chứng từ kiểm toán hoặc bị mã độc/nhân sự trái phép chỉnh sửa nội dung nhạy cảm.",
         recommendation:
-          'Cách ly tệp ngay lập tức, kích hoạt Safe Recovery 1-Click để khôi phục từ bản sao lưu gốc và rà soát Audit Log theo IP truy cập gần nhất.',
+          "Cách ly tệp ngay lập tức, kích hoạt Safe Recovery 1-Click để khôi phục từ bản sao lưu gốc và rà soát Audit Log theo IP truy cập gần nhất.",
       };
-    case 'missing_file':
+    case "missing_file":
       return {
         confidence: 98,
         rootCause:
-          'Tệp vật lý không còn tồn tại tại đường dẫn được chỉ định trong Document Vault.',
+          "Tệp vật lý không còn tồn tại tại đường dẫn được chỉ định trong Document Vault.",
         impact:
-          'Gián đoạn truy cập tài liệu vận hành và vi phạm chính sách lưu trữ liên tục.',
+          "Gián đoạn truy cập tài liệu vận hành và vi phạm chính sách lưu trữ liên tục.",
         recommendation:
-          'Thực hiện khôi phục từ Recovery Point gần nhất và kiểm tra nhật ký hệ thống tệp.',
+          "Thực hiện khôi phục từ Recovery Point gần nhất và kiểm tra nhật ký hệ thống tệp.",
       };
-    case 'expiring_soon':
-    case 'expired':
+    case "expiring_soon":
+    case "expired":
       return {
         confidence: 94,
         rootCause:
-          'Tài liệu đã tới ngưỡng cảnh báo hết hạn hiệu lực theo lịch nhắc tự động của n8n Renewal Reminder.',
+          "Tài liệu đã tới ngưỡng cảnh báo hết hạn hiệu lực theo lịch nhắc tự động của n8n Renewal Reminder.",
         impact:
-          'Rủi ro pháp lý và gián đoạn tuân thủ nội bộ nếu không gia hạn đúng hạn SLA.',
+          "Rủi ro pháp lý và gián đoạn tuân thủ nội bộ nếu không gia hạn đúng hạn SLA.",
         recommendation:
-          'Gửi thông báo tới phòng ban sở hữu để gia hạn hợp đồng/chính sách và tải lên phiên bản mới.',
+          "Gửi thông báo tới phòng ban sở hữu để gia hạn hợp đồng/chính sách và tải lên phiên bản mới.",
       };
     default:
       return {
         confidence: 90,
         rootCause:
-          'Hệ thống giám sát phát hiện bất thường về điểm sức khỏe hoặc cấu trúc phụ lục tài liệu.',
+          "Hệ thống giám sát phát hiện bất thường về điểm sức khỏe hoặc cấu trúc phụ lục tài liệu.",
         impact:
-          'Ảnh hưởng đến điểm sức khỏe tổng thể của kho tài liệu doanh nghiệp.',
+          "Ảnh hưởng đến điểm sức khỏe tổng thể của kho tài liệu doanh nghiệp.",
         recommendation:
-          'Kiểm tra chi tiết metadata và sử dụng công cụ Health Scanner để khắc phục tự động.',
+          "Kiểm tra chi tiết metadata và sử dụng công cụ Health Scanner để khắc phục tự động.",
       };
   }
 }
 
 function resolveDocumentInfo(docRef?: string | Document): Document | null {
-  if (!docRef || typeof docRef === 'string') return null;
+  if (!docRef || typeof docRef === "string") return null;
   return docRef;
 }
 
@@ -110,13 +111,31 @@ export default function IncidentsPage() {
     data: fetchedIncidents,
     loading,
     isMock,
-  } = useApi<Incident[]>('/incidents');
+    refetch,
+  } = useApi<Incident[]>("/incidents");
 
-  const [severityFilter, setSeverityFilter] = useState<'all' | IncidentSeverity>(
-    'all',
-  );
-  const [statusFilter, setStatusFilter] = useState<'all' | IncidentStatus>(
-    'all',
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [secondsLeft, setSecondsLeft] = useState(30);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const timer = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          void refetch();
+          return 30;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [autoRefresh, refetch]);
+
+  const [severityFilter, setSeverityFilter] = useState<
+    "all" | IncidentSeverity
+  >("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | IncidentStatus>(
+    "all",
   );
   const [incidentOverrides, setIncidentOverrides] = useState<
     Record<string, Incident>
@@ -124,7 +143,7 @@ export default function IncidentsPage() {
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(
     null,
   );
-  const [resolutionNotes, setResolutionNotes] = useState('');
+  const [resolutionNotes, setResolutionNotes] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
 
@@ -136,10 +155,10 @@ export default function IncidentsPage() {
   const filteredIncidents = useMemo(
     () =>
       incidents.filter((inc) => {
-        if (severityFilter !== 'all' && inc.severity !== severityFilter) {
+        if (severityFilter !== "all" && inc.severity !== severityFilter) {
           return false;
         }
-        if (statusFilter !== 'all' && inc.status !== statusFilter) {
+        if (statusFilter !== "all" && inc.status !== statusFilter) {
           return false;
         }
         return true;
@@ -153,15 +172,15 @@ export default function IncidentsPage() {
   );
 
   const summary = useMemo(() => {
-    const open = incidents.filter((i) => i.status === 'open').length;
+    const open = incidents.filter((i) => i.status === "open").length;
     const investigating = incidents.filter(
-      (i) => i.status === 'in_progress',
+      (i) => i.status === "in_progress",
     ).length;
     const resolved = incidents.filter(
-      (i) => i.status === 'resolved' || i.status === 'closed',
+      (i) => i.status === "resolved" || i.status === "closed",
     ).length;
     const critical = incidents.filter(
-      (i) => i.severity === 'critical' && i.status !== 'resolved',
+      (i) => i.severity === "critical" && i.status !== "resolved",
     ).length;
 
     return { total: incidents.length, open, investigating, resolved, critical };
@@ -174,24 +193,23 @@ export default function IncidentsPage() {
     setUpdatingStatus(true);
     const now = new Date().toISOString();
     const actionLabel =
-      nextStatus === 'in_progress'
-        ? 'ACKNOWLEDGED'
-        : nextStatus === 'resolved'
-          ? 'RESOLVED'
-          : 'STATUS_CHANGED';
+      nextStatus === "in_progress"
+        ? "ACKNOWLEDGED"
+        : nextStatus === "resolved"
+          ? "RESOLVED"
+          : "STATUS_CHANGED";
 
     const noteText =
-      nextStatus === 'in_progress'
-        ? 'SOC Operator đã tiếp nhận và chuyển sang trạng thái Investigating.'
-        : resolutionNotes.trim() ||
-          'Sự cố đã được xử lý và xác nhận an toàn.';
+      nextStatus === "in_progress"
+        ? "SOC Operator đã tiếp nhận và chuyển sang trạng thái Investigating."
+        : resolutionNotes.trim() || "Sự cố đã được xử lý và xác nhận an toàn.";
 
     const updated: Incident = {
       ...incident,
       status: nextStatus,
       resolutionNotes:
-        nextStatus === 'resolved' ? noteText : incident.resolutionNotes,
-      resolvedAt: nextStatus === 'resolved' ? now : incident.resolvedAt,
+        nextStatus === "resolved" ? noteText : incident.resolutionNotes,
+      resolvedAt: nextStatus === "resolved" ? now : incident.resolvedAt,
       updatedAt: now,
       timeline: [
         ...incident.timeline,
@@ -206,14 +224,14 @@ export default function IncidentsPage() {
     try {
       await apiClient.patch(`/incidents/${incident._id}/status`, {
         status: nextStatus,
-        resolutionNotes: nextStatus === 'resolved' ? noteText : undefined,
+        resolutionNotes: nextStatus === "resolved" ? noteText : undefined,
       });
     } catch {
       // Standalone mock fallback: vẫn cập nhật trực tiếp state cục bộ
     }
 
     setIncidentOverrides((prev) => ({ ...prev, [incident._id]: updated }));
-    setResolutionNotes('');
+    setResolutionNotes("");
     setUpdatingStatus(false);
     setBanner(
       `Đã cập nhật sự cố ${incident.incidentCode} sang trạng thái ${STATUS_UI_LABELS[nextStatus]}.`,
@@ -222,8 +240,8 @@ export default function IncidentsPage() {
 
   const columns: DataTableColumn<Incident>[] = [
     {
-      key: 'incidentCode',
-      header: 'Mã sự cố',
+      key: "incidentCode",
+      header: "Mã sự cố",
       render: (inc) => (
         <span className="font-mono text-xs font-semibold text-cyan-600 dark:text-cyan-400 whitespace-nowrap">
           {inc.incidentCode}
@@ -231,8 +249,8 @@ export default function IncidentsPage() {
       ),
     },
     {
-      key: 'title',
-      header: 'Chi tiết sự cố',
+      key: "title",
+      header: "Chi tiết sự cố",
       render: (inc) => {
         const doc = resolveDocumentInfo(inc.documentId);
         return (
@@ -248,19 +266,19 @@ export default function IncidentsPage() {
       },
     },
     {
-      key: 'severity',
-      header: 'Mức độ',
+      key: "severity",
+      header: "Mức độ",
       render: (inc) => (
         <Badge
           severity={inc.severity}
           showDot
-          pulse={inc.severity === 'critical' && inc.status !== 'resolved'}
+          pulse={inc.severity === "critical" && inc.status !== "resolved"}
         />
       ),
     },
     {
-      key: 'status',
-      header: 'Trạng thái',
+      key: "status",
+      header: "Trạng thái",
       render: (inc) => (
         <Badge status={inc.status} showDot>
           {STATUS_UI_LABELS[inc.status]}
@@ -268,24 +286,24 @@ export default function IncidentsPage() {
       ),
     },
     {
-      key: 'slaDeadline',
-      header: 'Hạn SLA',
+      key: "slaDeadline",
+      header: "Hạn SLA",
       render: (inc) => (
         <span
           className={[
-            'font-mono text-xs whitespace-nowrap',
+            "font-mono text-xs whitespace-nowrap",
             inc.slaBreached
-              ? 'font-semibold text-rose-600 dark:text-rose-400'
-              : 'text-slate-500 dark:text-slate-400',
-          ].join(' ')}
+              ? "font-semibold text-rose-600 dark:text-rose-400"
+              : "text-slate-500 dark:text-slate-400",
+          ].join(" ")}
         >
           {formatDateTime(inc.slaDeadline)}
         </span>
       ),
     },
     {
-      key: 'createdAt',
-      header: 'Thời gian phát hiện',
+      key: "createdAt",
+      header: "Thời gian phát hiện",
       render: (inc) => (
         <span className="font-mono text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
           {formatDateTime(inc.createdAt)}
@@ -293,9 +311,9 @@ export default function IncidentsPage() {
       ),
     },
     {
-      key: 'actions',
-      header: 'Thao tác',
-      align: 'right',
+      key: "actions",
+      header: "Thao tác",
+      align: "right",
       render: (inc) => (
         <Button
           variant="secondary"
@@ -334,8 +352,51 @@ export default function IncidentsPage() {
             )}
           </div>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Trung tâm tiếp nhận, điều tra nguyên nhân AI Audit và điều phối xử lý sự cố bảo mật.
+            Trung tâm tiếp nhận, điều tra nguyên nhân AI Audit và điều phối xử
+            lý sự cố bảo mật.
           </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setAutoRefresh((prev) => !prev);
+              setSecondsLeft(30);
+            }}
+            className={[
+              'inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-medium transition-colors cursor-pointer',
+              autoRefresh
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300',
+            ].join(' ')}
+          >
+            <span className="relative flex h-2 w-2">
+              {autoRefresh && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+              )}
+              <span
+                className={`relative inline-flex h-2 w-2 rounded-full ${
+                  autoRefresh ? 'bg-emerald-500' : 'bg-slate-400'
+                }`}
+              />
+            </span>
+            <span>
+              {autoRefresh ? `Auto-refresh (${secondsLeft}s)` : 'Auto-refresh: Tắt'}
+            </span>
+          </button>
+
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => {
+              setSecondsLeft(30);
+              void refetch();
+            }}
+            leftIcon={<RefreshCw className="h-4 w-4" />}
+          >
+            Làm mới
+          </Button>
         </div>
       </div>
 
@@ -372,7 +433,7 @@ export default function IncidentsPage() {
         <StatCard
           title="Open (Chưa tiếp nhận)"
           value={summary.open}
-          tone={summary.open > 0 ? 'amber' : 'default'}
+          tone={summary.open > 0 ? "amber" : "default"}
           loading={loading}
           icon={<AlertTriangle className="h-5 w-5" />}
           subtitle="Cần Acknowledge ngay"
@@ -388,7 +449,7 @@ export default function IncidentsPage() {
         <StatCard
           title="Critical đang hoạt động"
           value={summary.critical}
-          tone={summary.critical > 0 ? 'rose' : 'emerald'}
+          tone={summary.critical > 0 ? "rose" : "emerald"}
           loading={loading}
           icon={<FileWarning className="h-5 w-5" />}
           subtitle={`${summary.resolved} sự cố đã xử lý`}
@@ -404,11 +465,11 @@ export default function IncidentsPage() {
           </span>
           {(
             [
-              { label: 'Tất cả', value: 'all' },
-              { label: 'Critical', value: 'critical' },
-              { label: 'High', value: 'high' },
-              { label: 'Medium', value: 'medium' },
-              { label: 'Low', value: 'low' },
+              { label: "Tất cả", value: "all" },
+              { label: "Critical", value: "critical" },
+              { label: "High", value: "high" },
+              { label: "Medium", value: "medium" },
+              { label: "Low", value: "low" },
             ] as const
           ).map((item) => (
             <button
@@ -416,11 +477,11 @@ export default function IncidentsPage() {
               type="button"
               onClick={() => setSeverityFilter(item.value)}
               className={[
-                'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer',
+                "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                 severityFilter === item.value
-                  ? 'bg-cyan-600 text-white shadow-xs'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700',
-              ].join(' ')}
+                  ? "bg-cyan-600 text-white shadow-xs"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700",
+              ].join(" ")}
             >
               {item.label}
             </button>
@@ -433,10 +494,10 @@ export default function IncidentsPage() {
           </span>
           {(
             [
-              { label: 'Tất cả', value: 'all' },
-              { label: 'Open', value: 'open' },
-              { label: 'Investigating', value: 'in_progress' },
-              { label: 'Resolved', value: 'resolved' },
+              { label: "Tất cả", value: "all" },
+              { label: "Open", value: "open" },
+              { label: "Investigating", value: "in_progress" },
+              { label: "Resolved", value: "resolved" },
             ] as const
           ).map((item) => (
             <button
@@ -444,11 +505,11 @@ export default function IncidentsPage() {
               type="button"
               onClick={() => setStatusFilter(item.value)}
               className={[
-                'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer',
+                "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                 statusFilter === item.value
-                  ? 'bg-slate-900 dark:bg-cyan-500/20 text-white dark:text-cyan-300 ring-1 ring-cyan-500/40'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700',
-              ].join(' ')}
+                  ? "bg-slate-900 dark:bg-cyan-500/20 text-white dark:text-cyan-300 ring-1 ring-cyan-500/40"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700",
+              ].join(" ")}
             >
               {item.label}
             </button>
@@ -469,7 +530,7 @@ export default function IncidentsPage() {
           inc.description.toLowerCase().includes(q)
         }
         onRowClick={(inc) => {
-          setResolutionNotes(inc.resolutionNotes ?? '');
+          setResolutionNotes(inc.resolutionNotes ?? "");
           setSelectedIncidentId(inc._id);
         }}
         emptyTitle="Không có sự cố phù hợp với bộ lọc"
@@ -483,7 +544,7 @@ export default function IncidentsPage() {
         title={
           selectedIncident
             ? `${selectedIncident.incidentCode} — ${selectedIncident.title}`
-            : ''
+            : ""
         }
         description={
           selectedIncident
@@ -495,12 +556,12 @@ export default function IncidentsPage() {
           selectedIncident && (
             <div className="flex w-full flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                {selectedIncident.status === 'open' && (
+                {selectedIncident.status === "open" && (
                   <Button
                     variant="secondary"
                     loading={updatingStatus}
                     onClick={() =>
-                      void handleUpdateStatus(selectedIncident, 'in_progress')
+                      void handleUpdateStatus(selectedIncident, "in_progress")
                     }
                     leftIcon={<SearchCheck className="h-4 w-4" />}
                   >
@@ -508,13 +569,13 @@ export default function IncidentsPage() {
                   </Button>
                 )}
 
-                {selectedIncident.status !== 'resolved' &&
-                  selectedIncident.status !== 'closed' && (
+                {selectedIncident.status !== "resolved" &&
+                  selectedIncident.status !== "closed" && (
                     <Button
                       variant="primary"
                       loading={updatingStatus}
                       onClick={() =>
-                        void handleUpdateStatus(selectedIncident, 'resolved')
+                        void handleUpdateStatus(selectedIncident, "resolved")
                       }
                       leftIcon={<CheckCircle2 className="h-4 w-4" />}
                     >
@@ -618,7 +679,9 @@ export default function IncidentsPage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-slate-400">Toàn vẹn &amp; Health Score</p>
+                    <p className="text-slate-400">
+                      Toàn vẹn &amp; Health Score
+                    </p>
                     <div className="mt-1 flex items-center gap-2">
                       <Badge status={relatedDoc.integrityStatus} showDot />
                       <span className="font-mono font-bold text-slate-700 dark:text-slate-200">
@@ -635,10 +698,10 @@ export default function IncidentsPage() {
                 </div>
               ) : (
                 <p className="mt-2 font-mono text-xs text-slate-600 dark:text-slate-300">
-                  Document Ref:{' '}
-                  {typeof selectedIncident.documentId === 'string'
+                  Document Ref:{" "}
+                  {typeof selectedIncident.documentId === "string"
                     ? selectedIncident.documentId
-                    : 'Hệ thống tổng thể'}
+                    : "Hệ thống tổng thể"}
                 </p>
               )}
             </div>
@@ -669,8 +732,8 @@ export default function IncidentsPage() {
             </div>
 
             {/* Resolution Notes Input */}
-            {selectedIncident.status !== 'resolved' &&
-              selectedIncident.status !== 'closed' && (
+            {selectedIncident.status !== "resolved" &&
+              selectedIncident.status !== "closed" && (
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Ghi chú xử lý (khi đánh dấu Resolve)
