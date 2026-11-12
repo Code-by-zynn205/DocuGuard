@@ -7,14 +7,24 @@ import {
   Activity,
   Bell,
   ChevronRight,
+  LogOut,
   Menu,
   Search,
   Settings,
   ShieldAlert,
   UserCheck,
 } from 'lucide-react';
-import { NAV_ITEMS, ROUTES } from '@/constants';
+import { NAV_ITEMS, ROLE_COLORS, ROLE_LABELS, ROUTES } from '@/constants';
 import { useApi } from '@/hooks/useApi';
+import { useToast } from '@/hooks/useToast';
+import {
+  AUTH_CHANGE_EVENT,
+  clearAuthSession,
+  DEMO_ACCOUNTS,
+  getAuthUser,
+  getUserInitials,
+  type AuthSessionUser,
+} from '@/lib/auth';
 import { Badge } from '@/components/ui/Badge';
 import type { Incident, SystemHealthCheck } from '@/types';
 
@@ -36,7 +46,9 @@ const SEGMENT_LABELS: Record<string, string> = {
 export function Header({ onMenuClick }: HeaderProps) {
   const pathname = usePathname() ?? '/dashboard';
   const router = useRouter();
+  const toast = useToast();
 
+  const [currentUser, setCurrentUser] = useState<AuthSessionUser | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -49,6 +61,15 @@ export function Header({ onMenuClick }: HeaderProps) {
   const { data: healthData, isMock: isMockHealth } =
     useApi<SystemHealthCheck>('/health');
   const { data: incidentsData } = useApi<Incident[]>('/incidents');
+
+  useEffect(() => {
+    const syncUser = () => {
+      setCurrentUser(getAuthUser());
+    };
+    void Promise.resolve().then(syncUser);
+    window.addEventListener(AUTH_CHANGE_EVENT, syncUser);
+    return () => window.removeEventListener(AUTH_CHANGE_EVENT, syncUser);
+  }, []);
 
   // Phím tắt Ctrl+K / Cmd+K mở ô tìm kiếm nhanh
   useEffect(() => {
@@ -363,38 +384,82 @@ export function Header({ onMenuClick }: HeaderProps) {
             className="flex items-center gap-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-1 pl-1 pr-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-indigo-600 text-xs font-bold text-white shadow-xs">
-              AD
+              {getUserInitials(
+                currentUser?.fullName ?? DEMO_ACCOUNTS.admin.fullName,
+              )}
             </div>
             <div className="hidden text-left sm:block leading-tight">
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                Security Admin
-              </p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                  {currentUser?.fullName ?? 'Guest Operator'}
+                </p>
+                {currentUser && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${ROLE_COLORS[currentUser.role]}`}
+                  >
+                    {ROLE_LABELS[currentUser.role]}
+                  </span>
+                )}
+              </div>
               <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                SOC Operator
+                {currentUser?.title ?? 'SOC Session'}
               </p>
             </div>
           </button>
 
           {profileOpen && (
-            <div className="absolute right-0 top-11 z-40 w-56 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl">
-              <div className="border-b border-slate-100 dark:border-slate-800 px-4 py-3">
-                <p className="text-xs font-semibold text-slate-900 dark:text-white">
-                  admin@docuguard.io
+            <div className="absolute right-0 top-11 z-40 w-64 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl">
+              <div className="border-b border-slate-100 dark:border-slate-800 px-4 py-3 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                    {currentUser?.fullName ?? 'Chưa đăng nhập'}
+                  </p>
+                  {currentUser && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${ROLE_COLORS[currentUser.role]}`}
+                    >
+                      {ROLE_LABELS[currentUser.role]}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
+                  {currentUser?.email ?? 'guest@docuguard.io'}
                 </p>
-                <p className="mt-0.5 flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+                <p className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
                   <UserCheck className="h-3 w-3" />
-                  Phiên làm việc đã xác thực
+                  {currentUser?.department ?? 'Phiên làm việc đã xác thực'}
                 </p>
               </div>
-              <div className="p-1.5">
-                <Link
-                  href={ROUTES.SETTINGS}
-                  onClick={() => setProfileOpen(false)}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+
+              <div className="p-1.5 space-y-1">
+                {currentUser?.role !== 'viewer' && (
+                  <Link
+                    href={ROUTES.SETTINGS}
+                    onClick={() => setProfileOpen(false)}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    <Settings className="h-3.5 w-3.5 text-slate-400" />
+                    Cấu hình hệ thống
+                  </Link>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearAuthSession();
+                    setProfileOpen(false);
+                    toast.info(
+                      'Đã đăng xuất',
+                      'Phiên làm việc của bạn đã được xóa an toàn.',
+                    );
+                    router.replace(ROUTES.LOGIN);
+                    router.refresh();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
                 >
-                  <Settings className="h-3.5 w-3.5 text-slate-400" />
-                  Cấu hình hệ thống
-                </Link>
+                  <LogOut className="h-3.5 w-3.5" />
+                  Đăng xuất
+                </button>
               </div>
             </div>
           )}

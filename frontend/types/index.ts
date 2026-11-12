@@ -97,7 +97,7 @@ export type AuditEntityType =
   | "user"
   | "system";
 
-export type UserRole = "admin" | "reviewer" | "viewer";
+export type UserRole = "admin" | "auditor" | "reviewer" | "viewer";
 
 // ─────────────────────────────────────────────────────────────
 // NGƯỜI DÙNG (User)

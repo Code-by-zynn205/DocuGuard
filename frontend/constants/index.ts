@@ -13,6 +13,7 @@ import type {
   IncidentStatus,
   IntegrityStatus,
   RecoveryStatus,
+  UserRole,
   WorkflowExecutionStatus,
 } from '@/types';
 
@@ -22,6 +23,7 @@ import type {
 
 export const ROUTES = {
   HOME: '/',
+  LOGIN: '/login',
   DASHBOARD: '/dashboard',
   DOCUMENTS: '/documents',
   HEALTH_SCANNER: '/health-scanner',
@@ -298,3 +300,24 @@ export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;
 export const AUTH_TOKEN_STORAGE_KEY = 'docuguard_access_token';
+export const AUTH_USER_STORAGE_KEY = 'docuguard_user';
+export const AUTH_COOKIE_NAME = 'docuguard_token';
+export const AUTH_ROLE_COOKIE_NAME = 'docuguard_role';
+
+export const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Admin',
+  auditor: 'Auditor',
+  reviewer: 'Reviewer',
+  viewer: 'Viewer',
+};
+
+export const ROLE_COLORS: Record<UserRole, string> = {
+  admin:
+    'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30',
+  auditor:
+    'bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/30',
+  reviewer:
+    'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30',
+  viewer:
+    'bg-slate-500/15 text-slate-600 dark:text-slate-300 border border-slate-500/30',
+};
