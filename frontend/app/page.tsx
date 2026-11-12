@@ -1,5 +1,5 @@
-import { redirect, RedirectType } from 'next/navigation';
-import { ROUTES } from '@/constants';
+import { redirect, RedirectType } from "next/navigation";
+import { ROUTES } from "@/constants";
 
 /**
  * Trang gốc (/): chuyển hướng HTTP 307 sang /dashboard.

@@ -18,6 +18,7 @@ import {
 import { Modal } from '@/components/common/Modal';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { useToast } from '@/hooks/useToast';
 import { apiClient } from '@/lib/api';
 
 type SettingsTab = 'general' | 'security' | 'integrations';
@@ -84,6 +85,7 @@ const PUBLIC_API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export default function SettingsPage() {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [settings, setSettings] =
     useState<DocuGuardSettings>(DEFAULT_SETTINGS);
@@ -143,6 +145,10 @@ export default function SettingsPage() {
 
     await new Promise((r) => setTimeout(r, 400));
     setSaving(false);
+    toast.success(
+      'Đã lưu cấu hình hệ thống',
+      'Các thiết lập bảo mật và tích hợp đã được cập nhật.',
+    );
     setBanner({
       type: 'success',
       text: 'Đã lưu cấu hình hệ thống DocuGuard thành công.',
@@ -159,11 +165,16 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ event: 'docuguard.webhook_test' }),
       });
+      toast.success('Webhook n8n phản hồi thành công');
       setBanner({
         type: 'success',
         text: `Kết nối thành công tới n8n Webhook (${settings.n8nHealthScanWebhook}).`,
       });
     } catch {
+      toast.info(
+        'Đã gửi gói tin kiểm tra Webhook',
+        'n8n local chưa bật hoặc CORS chặn phản hồi từ trình duyệt.',
+      );
       setBanner({
         type: 'info',
         text: `Đã gửi gói tin kiểm tra tới ${settings.n8nHealthScanWebhook} (n8n local chưa bật hoặc CORS chặn trình duyệt).`,
@@ -203,10 +214,12 @@ export default function SettingsPage() {
     setApiKeys((prev) => [newEntry, ...prev]);
     setGeneratedRawKey(rawKey);
     setNewKeyName('');
+    toast.success('Đã tạo API Key mới', newEntry.name);
   };
 
   const handleRevokeKey = (id: string) => {
     setApiKeys((prev) => prev.filter((k) => k.id !== id));
+    toast.warning('Đã thu hồi API Key', 'Key này không còn hiệu lực.');
     setBanner({
       type: 'info',
       text: 'Đã thu hồi API Key khỏi hệ thống.',

@@ -28,6 +28,7 @@ import {
   type StatusColorKey,
 } from '@/constants';
 import { useApi } from '@/hooks/useApi';
+import { useToast } from '@/hooks/useToast';
 import { apiClient, normalizeApiError } from '@/lib/api';
 import type { Document, DocumentCategory } from '@/types';
 
@@ -125,6 +126,7 @@ async function computeFileSha256(file: File): Promise<string> {
 }
 
 export default function DocumentsPage() {
+  const toast = useToast();
   const {
     data: fetchedDocuments,
     loading,
@@ -204,10 +206,15 @@ export default function DocumentsPage() {
     try {
       await navigator.clipboard.writeText(doc.fileHash);
       setCopiedHashId(doc._id);
+      toast.success('Đã sao chép mã SHA-256', doc.originalFileName);
       setTimeout(() => {
         setCopiedHashId((current) => (current === doc._id ? null : current));
       }, 1800);
     } catch {
+      toast.warning(
+        'Không thể truy cập clipboard tự động',
+        `Mã SHA-256: ${shortenHash(doc.fileHash)}`,
+      );
       setBanner({
         type: 'warning',
         text: `Không thể truy cập clipboard tự động. Mã SHA-256: ${doc.fileHash}`,
@@ -251,6 +258,10 @@ export default function DocumentsPage() {
     link.remove();
     URL.revokeObjectURL(url);
 
+    toast.success(
+      'Đã tải xuống chứng thực SHA-256',
+      doc.originalFileName,
+    );
     setBanner({
       type: 'success',
       text: `Đã tải xuống tệp chứng thực SHA-256 cho "${doc.originalFileName}".`,
@@ -268,6 +279,10 @@ export default function DocumentsPage() {
       // Bỏ qua lỗi mạng khi chạy standalone mock vì đã cập nhật trạng thái cách ly cục bộ
     }
 
+    toast.warning(
+      'Đã cách ly tài liệu',
+      `"${doc.title}" đã được chuyển vào vùng kiểm dịch (Quarantined).`,
+    );
     setBanner({
       type: 'warning',
       text: `Đã cách ly tài liệu "${doc.title}" vào vùng kiểm dịch (Quarantined).`,
@@ -394,6 +409,10 @@ export default function DocumentsPage() {
         mockFallback: false,
       });
       setAddedDocuments((prev) => [res.data, ...prev]);
+      toast.success(
+        'Upload & xác thực SHA-256 thành công',
+        newDocument.originalFileName,
+      );
       setBanner({
         type: 'success',
         text: `Đã tải lên và xác thực SHA-256 cho "${newDocument.originalFileName}".`,
@@ -404,6 +423,10 @@ export default function DocumentsPage() {
       // Nếu backend chưa bật, lưu trực tiếp vào kho tài liệu cục bộ ở chế độ standalone
       if (isMock) {
         setAddedDocuments((prev) => [newDocument, ...prev]);
+        toast.success(
+          'Đã lưu vào Document Vault',
+          `${newDocument.originalFileName} đã được băm SHA-256.`,
+        );
         setBanner({
           type: 'success',
           text: `Đã mã hóa SHA-256 và đưa "${newDocument.originalFileName}" vào Document Vault (Standalone Mode).`,
@@ -411,9 +434,11 @@ export default function DocumentsPage() {
         setUploadModalOpen(false);
         resetUploadModal();
       } else {
+        const msg = normalizeApiError(err);
+        toast.error('Upload tài liệu thất bại', msg);
         setBanner({
           type: 'error',
-          text: normalizeApiError(err),
+          text: msg,
         });
         setUploading(false);
       }

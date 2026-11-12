@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -19,6 +19,7 @@ import { Modal } from '@/components/common/Modal';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useApi } from '@/hooks/useApi';
+import { useToast } from '@/hooks/useToast';
 import { apiClient } from '@/lib/api';
 import type { Document, RecoveryPoint } from '@/types';
 
@@ -64,6 +65,7 @@ function getDocumentTitle(point: RecoveryPoint): string {
 }
 
 export default function RecoveryPage() {
+  const toast = useToast();
   const {
     data: fetchedRecoveries,
     loading,
@@ -162,6 +164,10 @@ export default function RecoveryPage() {
     }));
     setActiveSnapshot(updatedSnapshot);
     setModalStep('done');
+    toast.success(
+      'Khôi phục Snapshot hoàn tất',
+      `${getDocumentTitle(updatedSnapshot)} đã được kiểm chứng SHA-256.`,
+    );
     setBanner(
       `Đã khôi phục an toàn "${getDocumentTitle(updatedSnapshot)}" về điểm ${updatedSnapshot.recoveryCode ?? updatedSnapshot._id} (SHA-256 Verified).`,
     );
