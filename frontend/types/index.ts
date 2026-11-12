@@ -2,7 +2,7 @@
  * types/index.ts
  *
  * Khai báo tập trung các kiểu TypeScript dùng trong frontend DocuGuard.
- * Đồng bộ 100% với Mongoose Schemas của backend.
+ * Đồng bộ với Mongoose Schemas của backend và các module Cybersecurity SaaS.
  */
 
 // ─────────────────────────────────────────────────────────────
@@ -11,44 +11,93 @@
 
 export type HealthScore = number; // 0 - 100
 
-export type HealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown';
+export type HealthStatus = "healthy" | "warning" | "critical" | "unknown";
 
-export type IntegrityStatus = 'intact' | 'tampered' | 'missing';
+export type IntegrityStatus = "intact" | "tampered" | "missing";
 
-export type DocumentStatus = 'active' | 'archived' | 'deleted';
+export type DocumentStatus = "active" | "archived" | "deleted";
 
 export type DocumentCategory =
-  | 'contract'
-  | 'financial'
-  | 'hr'
-  | 'legal'
-  | 'technical'
-  | 'operational'
-  | 'other';
+  | "contract"
+  | "financial"
+  | "hr"
+  | "legal"
+  | "technical"
+  | "operational"
+  | "other";
 
-export type IncidentSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type IncidentSeverity = "low" | "medium" | "high" | "critical";
 
-export type IncidentStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+export type IncidentStatus = "open" | "in_progress" | "resolved" | "closed";
 
 export type IncidentType =
-  | 'integrity_violation'
-  | 'missing_file'
-  | 'expired'
-  | 'expiring_soon'
-  | 'duplicate'
-  | 'missing_appendix'
-  | 'low_health_score'
-  | 'workflow_failure';
+  | "integrity_violation"
+  | "missing_file"
+  | "expired"
+  | "expiring_soon"
+  | "duplicate"
+  | "missing_appendix"
+  | "low_health_score"
+  | "workflow_failure";
 
 export type RecoveryStatus =
-  | 'pending_approval'
-  | 'approved'
-  | 'rejected'
-  | 'executing'
-  | 'completed'
-  | 'failed';
+  | "pending_approval"
+  | "approved"
+  | "rejected"
+  | "executing"
+  | "completed"
+  | "failed";
 
-export type UserRole = 'admin' | 'reviewer' | 'viewer';
+export type WorkflowType =
+  | "health_scanner"
+  | "auto_remediation"
+  | "renewal_reminder"
+  | "workflow_monitor";
+
+export type WorkflowTriggerSource = "cron" | "webhook" | "manual";
+
+export type WorkflowExecutionStatus =
+  | "idle"
+  | "running"
+  | "success"
+  | "failed"
+  | "stuck"
+  | "retrying";
+
+export type AuditAction =
+  | "document.upload"
+  | "document.view"
+  | "document.download"
+  | "document.update"
+  | "document.delete"
+  | "document.integrity_check"
+  | "document.tamper_detected"
+  | "document.version_restore"
+  | "recovery.requested"
+  | "recovery.approved"
+  | "recovery.rejected"
+  | "recovery.executed"
+  | "incident.created"
+  | "incident.assigned"
+  | "incident.status_change"
+  | "incident.resolved"
+  | "workflow.health_scan"
+  | "workflow.auto_remediation"
+  | "workflow.renewal_reminder"
+  | "workflow.failure_alert"
+  | "auth.login"
+  | "auth.logout";
+
+export type AuditEntityType =
+  | "document"
+  | "document_version"
+  | "incident"
+  | "recovery"
+  | "workflow"
+  | "user"
+  | "system";
+
+export type UserRole = "admin" | "reviewer" | "viewer";
 
 // ─────────────────────────────────────────────────────────────
 // NGƯỜI DÙNG (User)
@@ -152,6 +201,46 @@ export interface DocumentVersion {
 }
 
 // ─────────────────────────────────────────────────────────────
+// KẾT QUẢ QUÉT SỨC KHỎE & TOÀN VẸN (HealthScanResult)
+// ─────────────────────────────────────────────────────────────
+
+export interface HealthScanResult {
+  _id: string;
+  scanId: string;
+  documentId: string | Document;
+  documentTitle: string;
+  originalFileName?: string;
+  department: string;
+  category?: DocumentCategory;
+  healthScore: HealthScore;
+  previousScore?: HealthScore;
+  healthStatus: HealthStatus;
+  integrityStatus: IntegrityStatus;
+  intact: boolean;
+  expectedHash: string;
+  actualHash?: string;
+  deductions: HealthDeduction[];
+  issuesDetected: number;
+  incidentCreated?: string;
+  triggerSource: WorkflowTriggerSource;
+  durationMs?: number;
+  message?: string;
+  scannedAt: string;
+}
+
+export interface HealthScanSummary {
+  totalScanned: number;
+  healthyCount: number;
+  warningCount: number;
+  criticalCount: number;
+  tamperedCount: number;
+  missingCount: number;
+  averageScore: HealthScore;
+  lastScanAt: string;
+  results: HealthScanResult[];
+}
+
+// ─────────────────────────────────────────────────────────────
 // SỰ CỐ (Incident)
 // ─────────────────────────────────────────────────────────────
 
@@ -186,19 +275,25 @@ export interface Incident {
 }
 
 // ─────────────────────────────────────────────────────────────
-// KHÔI PHỤC AN TOÀN (Safe Recovery)
+// ĐIỂM KHÔI PHỤC AN TOÀN (RecoveryPoint)
 // ─────────────────────────────────────────────────────────────
 
-export interface Recovery {
+export interface RecoveryPoint {
   _id: string;
+  recoveryCode?: string;
   documentId: string | Document;
+  documentTitle?: string;
+  department?: string;
   incidentId?: string | Incident;
+  versionNumber?: number;
   status: RecoveryStatus;
   reason: string;
   sourceBackupPath: string;
   sourceBackupHash: string;
   corruptedFileHash?: string;
+  backupSize?: number;
   isConfidentialDocument: boolean;
+  requiresApproval?: boolean;
   requestedBy: string | User;
   approvedBy?: string | User;
   approvalToken?: string;
@@ -206,42 +301,53 @@ export interface Recovery {
   approvalRequestedAt?: string;
   approvalDecisionAt?: string;
   restoredAt?: string;
+  verifiedAfterRestore?: boolean;
   errorMessage?: string;
   createdAt: string;
   updatedAt: string;
 }
 
+/** Alias tương thích ngược với schema Recovery ở backend */
+export type Recovery = RecoveryPoint;
+
 // ─────────────────────────────────────────────────────────────
-// NHẬT KÝ KIỂM TOÁN (Audit Log)
+// NHẬT KÝ KIỂM TOÁN (AuditLog)
 // ─────────────────────────────────────────────────────────────
 
 export interface AuditLog {
   _id: string;
-  action: string;
-  entityType: string;
+  action: AuditAction | (string & {});
+  entityType: AuditEntityType | (string & {});
   entityId: string;
+  entityName?: string;
   userId?: string | User;
   userEmail?: string;
-  userRole?: string;
+  userRole?: UserRole | string;
   ipAddress?: string;
   userAgent?: string;
-  status: 'success' | 'failure';
+  status: "success" | "failure";
+  severity?: "info" | "warning" | "critical";
+  description?: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
 }
 
 // ─────────────────────────────────────────────────────────────
-// TỰ ĐỘNG HÓA N8N (Automation Log)
+// TỰ ĐỘNG HÓA N8N (AutomationWorkflow)
 // ─────────────────────────────────────────────────────────────
 
-export interface AutomationLog {
+export interface AutomationWorkflow {
   _id: string;
-  workflowType: 'health_scanner' | 'auto_remediation' | 'renewal_reminder' | 'workflow_monitor';
+  workflowType: WorkflowType;
   workflowName: string;
+  description?: string;
   n8nWorkflowId?: string;
   n8nExecutionId?: string;
-  triggerSource: 'cron' | 'webhook' | 'manual';
-  status: 'running' | 'success' | 'failed' | 'stuck' | 'retrying';
+  webhookUrl?: string;
+  scheduleCron?: string;
+  isActive: boolean;
+  triggerSource: WorkflowTriggerSource;
+  status: WorkflowExecutionStatus;
   scannedDocumentsCount: number;
   healthyCount: number;
   warningCount: number;
@@ -249,13 +355,20 @@ export interface AutomationLog {
   incidentsCreatedCount: number;
   notificationsSentCount: number;
   retryCount: number;
+  successRate?: number;
   errorDetails?: string;
+  lastRunAt?: string;
+  nextRunAt?: string;
   startedAt: string;
   completedAt?: string;
   durationMs?: number;
+  payload?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
+
+/** Alias tương thích ngược với AutomationLog */
+export type AutomationLog = AutomationWorkflow;
 
 // ─────────────────────────────────────────────────────────────
 // BẢNG ĐIỀU KHIỂN & RISK RADAR (Dashboard Summary & Trends)
@@ -264,9 +377,14 @@ export interface AutomationLog {
 export interface RiskRadarItem {
   documentId: string;
   title: string;
-  department: string;
-  healthScore: number;
-  primaryRiskReason: string;
+  originalFileName?: string;
+  department?: string;
+  category?: DocumentCategory;
+  healthScore: HealthScore;
+  healthStatus?: HealthStatus;
+  integrityStatus?: IntegrityStatus;
+  expiresAt?: string;
+  primaryRiskReason?: string;
 }
 
 export interface DashboardSummary {
@@ -278,6 +396,7 @@ export interface DashboardSummary {
   expiringDocuments: number;
   overallHealthScore: HealthScore;
   riskRadar?: RiskRadarItem[];
+  recentIncidents?: Incident[];
 }
 
 export interface HealthSnapshot {
@@ -293,4 +412,16 @@ export interface HealthSnapshot {
   topRiskRadar: RiskRadarItem[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SystemHealthCheck {
+  status: "ok" | "degraded" | "down";
+  service: string;
+  version: string;
+  environment: string;
+  checks: {
+    server: "ok" | "down";
+    database: "ok" | "disconnected";
+    n8n: "ok" | "unreachable";
+  };
 }

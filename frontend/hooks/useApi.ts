@@ -1,73 +1,152 @@
 /**
  * hooks/useApi.ts
  *
- * Custom hook để gọi API backend từ React component.
- *
- * MỤC ĐÍCH:
- * - Gom logic fetch + loading + error vào 1 hook.
- * - Tránh lặp code trong mỗi component.
- *
- * CÁCH DÙNG:
- * const { data, loading, error } = useApi<Document[]>('/documents');
- *
- * LƯU Ý:
- * Hook này chỉ dành cho dữ liệu GET (đọc).
- * Với POST/PUT/DELETE, dùng apiClient trực tiếp trong handler.
- *
- * XEM THÊM: docs/FRONTEND_GUIDE.md
+ * Custom React Hook quản lý gọi API GET từ Client Component.
+ * Hỗ trợ tự động hủy request cũ (AbortController), theo dõi trạng thái
+ * data / loading / error và cung cấp hàm refetch ổn định.
  */
 
 'use client';
 
-import { useState, useEffect } from 'react';
-import { apiClient, ApiException } from '@/lib/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  apiClient,
+  normalizeApiError,
+  type QueryParamValue,
+} from '@/lib/api';
 
-interface UseApiState<T> {
+export interface UseApiOptions<T> {
+  /** Bật/tắt tự động gọi API khi mount hoặc dependencies thay đổi (mặc định: true) */
+  enabled?: boolean;
+  /** Dữ liệu khởi tạo trước khi có response */
+  initialData?: T | null;
+  /** Query parameters nối vào URL */
+  params?: Record<string, QueryParamValue>;
+  /** Bearer token ghi đè cho request này */
+  token?: string;
+  /** Cho phép dùng mock fallback data khi backend chưa chạy (mặc định: true) */
+  mockFallback?: boolean;
+  /** Timeout cho request tính theo ms */
+  timeoutMs?: number;
+  /** Callback chạy khi fetch thành công */
+  onSuccess?: (data: T) => void;
+  /** Callback chạy khi fetch thất bại */
+  onError?: (error: string) => void;
+}
+
+export interface UseApiResult<T> {
   data: T | null;
   loading: boolean;
   error: string | null;
+  isMock: boolean;
+  refetch: () => Promise<T | null>;
 }
 
 /**
- * Hook tự động fetch data khi component mount.
+ * Custom hook fetch dữ liệu type-safe với loading, error và refetch.
  *
- * @param path - Đường dẫn API, ví dụ: '/health' hoặc '/documents'
+ * @example
+ * const { data, loading, error, refetch } = useApi<Document[]>('/documents');
  */
-export function useApi<T>(path: string): UseApiState<T> {
-  const [state, setState] = useState<UseApiState<T>>({
-    data: null,
-    loading: true,
-    error: null,
-  });
+export function useApi<T>(
+  path: string | null,
+  options: UseApiOptions<T> = {},
+): UseApiResult<T> {
+  const {
+    enabled = true,
+    initialData = null,
+    params,
+    token,
+    mockFallback = true,
+    timeoutMs,
+    onSuccess,
+    onError,
+  } = options;
+
+  const [data, setData] = useState<T | null>(initialData);
+  const [loading, setLoading] = useState<boolean>(Boolean(path && enabled));
+  const [error, setError] = useState<string | null>(null);
+  const [isMock, setIsMock] = useState<boolean>(false);
+
+  const paramsKey = JSON.stringify(params ?? {});
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const callbacksRef = useRef({ onSuccess, onError });
 
   useEffect(() => {
-    let cancelled = false;
+    callbacksRef.current = { onSuccess, onError };
+  }, [onSuccess, onError]);
 
-    async function fetchData() {
-      try {
-        setState((prev) => ({ ...prev, loading: true, error: null }));
-        const response = await apiClient.get<T>(path);
-        if (!cancelled) {
-          setState({ data: response.data, loading: false, error: null });
-        }
-      } catch (err) {
-        if (!cancelled) {
-          const message =
-            err instanceof ApiException
-              ? err.message
-              : 'Lỗi kết nối đến server';
-          setState({ data: null, loading: false, error: message });
-        }
-      }
+  const executeFetch = useCallback(async (): Promise<T | null> => {
+    if (!path) {
+      return null;
     }
 
-    void fetchData();
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-    // Cleanup: hủy cập nhật state nếu component đã unmount
+    setLoading(true);
+    setError(null);
+
+    try {
+      const parsedParams = JSON.parse(paramsKey) as Record<
+        string,
+        QueryParamValue
+      >;
+
+      const response = await apiClient.get<T>(path, {
+        params: parsedParams,
+        token,
+        mockFallback,
+        timeoutMs,
+        signal: controller.signal,
+      });
+
+      if (controller.signal.aborted) {
+        return null;
+      }
+
+      setData(response.data);
+      setIsMock(Boolean(response.isMock));
+      setLoading(false);
+      callbacksRef.current.onSuccess?.(response.data);
+      return response.data;
+    } catch (err) {
+      if (controller.signal.aborted) {
+        return null;
+      }
+
+      const message = normalizeApiError(err);
+      setError(message);
+      setLoading(false);
+      callbacksRef.current.onError?.(message);
+      return null;
+    }
+  }, [path, paramsKey, token, mockFallback, timeoutMs]);
+
+  useEffect(() => {
+    if (!path || !enabled) {
+      return;
+    }
+
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (active) {
+        void executeFetch();
+      }
+    });
+
     return () => {
-      cancelled = true;
+      active = false;
+      abortControllerRef.current?.abort();
     };
-  }, [path]);
+  }, [path, enabled, executeFetch]);
 
-  return state;
+  return {
+    data,
+    loading,
+    error,
+    isMock,
+    refetch: executeFetch,
+  };
 }
