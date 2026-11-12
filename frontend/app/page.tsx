@@ -1,11 +1,9 @@
-/**
- * app/page.tsx — Trang gốc (/)
- *
- * Hiện tại: redirect đến /dashboard
- * Sau này: có thể là trang landing/login
- */
-import { redirect } from 'next/navigation';
+import { redirect, RedirectType } from 'next/navigation';
+import { ROUTES } from '@/constants';
 
+/**
+ * Trang gốc (/): chuyển hướng HTTP 307 sang /dashboard.
+ */
 export default function HomePage() {
-  redirect('/dashboard');
+  redirect(ROUTES.DASHBOARD, RedirectType.replace);
 }
