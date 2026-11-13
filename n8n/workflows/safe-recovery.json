@@ -20,7 +20,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/documents/{{ $json.body ? $json.body.documentId : $json.documentId }}",
+        "url": "=http://docuguard-server:3001/api/documents/{{ $json.body ? $json.body.documentId : $json.documentId }}",
         "options": {
           "timeout": 10000
         }
@@ -51,7 +51,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/documents/{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data._id : $('Fetch Document Detail').first().json._id) }}/recover",
+        "url": "=http://docuguard-server:3001/api/documents/{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data._id : $('Fetch Document Detail').first().json._id) }}/recover",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"reason\": \"n8n Safe Recovery: Tự động khôi phục tài liệu tiêu chuẩn từ bản sao lưu an toàn\"\n}",
@@ -69,7 +69,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/recovery/request",
+        "url": "http://docuguard-server:3001/api/recovery/request",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"documentId\": \"{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data._id : $('Fetch Document Detail').first().json._id) }}\",\n  \"reason\": \"Yêu cầu phê duyệt 1-click qua Gmail cho tài liệu mật: {{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data.title : $('Fetch Document Detail').first().json.title) }}\"\n}",
