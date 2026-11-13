@@ -1,0 +1,169 @@
+{
+  "name": "DocuGuard - Safe Recovery Gmail 1-Click Approval",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "safe-recovery",
+        "responseMode": "responseNode",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-recovery-webhook",
+      "name": "Recovery Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [160, 260],
+      "webhookId": "safe-recovery"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/documents/{{ $json.body ? $json.body.documentId : $json.documentId }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "node-fetch-doc-detail",
+      "name": "Fetch Document Detail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 260]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ ($json.data ? $json.data.isConfidential : $json.isConfidential) }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "node-check-confidential",
+      "name": "Is Confidential Document?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [640, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/documents/{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data._id : $('Fetch Document Detail').first().json._id) }}/recover",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"reason\": \"n8n Safe Recovery: Tự động khôi phục tài liệu tiêu chuẩn từ bản sao lưu an toàn\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-execute-direct-recovery",
+      "name": "Execute Direct Recovery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 380],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/recovery/request",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"documentId\": \"{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data._id : $('Fetch Document Detail').first().json._id) }}\",\n  \"reason\": \"Yêu cầu phê duyệt 1-click qua Gmail cho tài liệu mật: {{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data.title : $('Fetch Document Detail').first().json.title) }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "node-create-approval-task",
+      "name": "Create Approval & Send Gmail 1-Click",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 140],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"documentId\": \"{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data._id : $('Fetch Document Detail').first().json._id) }}\",\n  \"title\": \"{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data.title : $('Fetch Document Detail').first().json.title) }}\",\n  \"isConfidential\": {{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data.isConfidential : $('Fetch Document Detail').first().json.isConfidential) }},\n  \"actionTaken\": \"{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data.isConfidential : $('Fetch Document Detail').first().json.isConfidential) ? 'GMAIL_1CLICK_APPROVAL_SENT' : 'RECOVERED_SUCCESSFULLY' }}\",\n  \"timestamp\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "node-respond-recovery",
+      "name": "Respond Recovery Outcome",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1220, 260]
+    }
+  ],
+  "connections": {
+    "Recovery Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Document Detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Document Detail": {
+      "main": [
+        [
+          {
+            "node": "Is Confidential Document?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Confidential Document?": {
+      "main": [
+        [
+          {
+            "node": "Create Approval & Send Gmail 1-Click",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Direct Recovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Direct Recovery": {
+      "main": [
+        [
+          {
+            "node": "Respond Recovery Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Approval & Send Gmail 1-Click": {
+      "main": [
+        [
+          {
+            "node": "Respond Recovery Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

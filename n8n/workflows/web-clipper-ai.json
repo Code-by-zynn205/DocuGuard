@@ -1,0 +1,102 @@
+{
+  "name": "DocuGuard - Smart Web Clipper AI (Google & Facebook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "web-clipper",
+        "responseMode": "responseNode",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-clipper-webhook",
+      "name": "Web Clipper Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [160, 260],
+      "webhookId": "web-clipper"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst payload = raw.body ? raw.body : raw;\nreturn [{\n  json: {\n    selectedText: payload.selectedText || payload.text || '',\n    pageTitle: payload.pageTitle || payload.title || 'Web Snippet',\n    sourceUrl: payload.sourceUrl || payload.url || '',\n    sourcePlatform: payload.sourcePlatform || 'web',\n    userEmail: payload.userEmail || '',\n    saveToDrive: payload.saveToDrive !== false,\n    notifyGmail: Boolean(payload.notifyGmail)\n  }\n}];"
+      },
+      "id": "node-normalize-clip",
+      "name": "Normalize Highlight Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/web-clipper/clip",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-ai-classify-save",
+      "name": "AI Classify, Seal SHA-256 & Save Drive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 260],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "node-respond-clipper",
+      "name": "Respond Clipper Outcome",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 260]
+    }
+  ],
+  "connections": {
+    "Web Clipper Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Highlight Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Highlight Payload": {
+      "main": [
+        [
+          {
+            "node": "AI Classify, Seal SHA-256 & Save Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Classify, Seal SHA-256 & Save Drive": {
+      "main": [
+        [
+          {
+            "node": "Respond Clipper Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}
+

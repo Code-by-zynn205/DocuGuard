@@ -1,21 +1,11 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { Header } from '@/components/layout/Header';
 import './globals.css';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
-
 export const metadata: Metadata = {
-  title: 'DocuGuard — Kho tài liệu tự giám sát',
-  description:
-    'Nền tảng quản lý tài liệu doanh nghiệp có khả năng tự giám sát, phát hiện bất thường và tự phục hồi.',
+  title: 'DocuGuard - Quản Lý & Giám Sát An Toàn Tài Liệu',
+  description: 'Hệ thống tự động bảo vệ tính toàn vẹn tài liệu doanh nghiệp',
 };
 
 export default function RootLayout({
@@ -24,12 +14,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="vi"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-gray-50 text-gray-900">
-        {children}
+    <html lang="vi" className="h-full">
+      <body className="flex min-h-screen bg-slate-50/50 text-slate-900 antialiased font-sans">
+        <Sidebar />
+        <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+          <Header />
+          <main className="flex-1 p-6 sm:p-8 max-w-7xl w-full mx-auto">
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   );
