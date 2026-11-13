@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, Model } from 'mongoose';
+import { Model, type Connection } from 'mongoose';
 import {
   AutomationLog,
   AutomationLogDocument,

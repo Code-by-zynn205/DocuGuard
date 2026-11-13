@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import { Connection } from 'mongoose';
+import type { Connection } from 'mongoose';
 import { AuditAction, AuditEntityType } from '../../database/schemas/audit-log.schema.js';
 import { AuditService } from '../audit/audit.service.js';
 
