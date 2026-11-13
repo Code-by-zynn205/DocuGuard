@@ -37,7 +37,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/google/drive/sync",
+        "url": "http://docuguard-server:3001/api/google/drive/sync",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={}",
@@ -55,7 +55,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/documents",
+        "url": "http://docuguard-server:3001/api/documents",
         "options": {
           "timeout": 10000
         }
@@ -96,7 +96,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/incidents",
+        "url": "http://docuguard-server:3001/api/incidents",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"documentId\": \"{{ $json.documentId }}\",\n  \"title\": \"Cảnh báo tự động: {{ $json.title }}\",\n  \"description\": \"n8n Health Scan phát hiện bất thường: {{ $json.issuesSummary }}\",\n  \"severity\": \"{{ $json.severity }}\"\n}",
@@ -114,7 +114,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/google/gmail/send",
+        "url": "http://docuguard-server:3001/api/google/gmail/send",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"toEmail\": \"{{ $('Evaluate Health Rules').item.json.ownerEmail }}\",\n  \"subject\": \"[DocuGuard Health Alert] {{ $('Evaluate Health Rules').item.json.title }}\",\n  \"htmlBody\": \"<h3>Cảnh báo sức khỏe tài liệu</h3><p><b>Tài liệu:</b> {{ $('Evaluate Health Rules').item.json.title }}</p><p><b>Mức độ:</b> {{ $('Evaluate Health Rules').item.json.severity }}</p><p><b>Chi tiết:</b> {{ $('Evaluate Health Rules').item.json.issuesSummary }}</p>\"\n}",

@@ -30,7 +30,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/audit-logs/entity/document/{{ $json.documentId }}",
+        "url": "=http://docuguard-server:3001/api/audit-logs/entity/document/{{ $json.documentId }}",
         "options": {
           "timeout": 10000
         }
@@ -45,7 +45,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/incidents",
+        "url": "http://docuguard-server:3001/api/incidents",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"documentId\": \"{{ $('Classify & Prepare Incident').first().json.documentId }}\",\n  \"title\": \"{{ $('Classify & Prepare Incident').first().json.incidentTitle }}\",\n  \"description\": \"{{ $('Classify & Prepare Incident').first().json.incidentDescription }}\",\n  \"severity\": \"{{ $('Classify & Prepare Incident').first().json.severity }}\"\n}",
@@ -63,7 +63,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/google/gmail/send",
+        "url": "http://docuguard-server:3001/api/google/gmail/send",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"toEmail\": \"{{ $('Classify & Prepare Incident').first().json.ownerEmail || '' }}\",\n  \"subject\": \"[CRITICAL] DocuGuard Alert: {{ $('Classify & Prepare Incident').first().json.incidentTitle }}\",\n  \"htmlBody\": \"<div style='font-family:Arial,sans-serif;padding:16px;border:1px solid #fecdd3;border-radius:10px;'><h2 style='color:#be123c;'>Cảnh báo Sự cố Toàn vẹn Tài liệu</h2><p><b>Sự cố:</b> {{ $('Classify & Prepare Incident').first().json.incidentTitle }}</p><p><b>Mức độ:</b> {{ $('Classify & Prepare Incident').first().json.severity }}</p><p><b>Chi tiết:</b> {{ $('Classify & Prepare Incident').first().json.incidentDescription }}</p></div>\"\n}",
@@ -109,7 +109,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/documents/{{ $('Classify & Prepare Incident').first().json.documentId }}/recover",
+        "url": "=http://docuguard-server:3001/api/documents/{{ $('Classify & Prepare Incident').first().json.documentId }}/recover",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"reason\": \"n8n Auto-Resolution: Tự động phục hồi tệp từ bản sao lưu an toàn sau khi phát hiện lệch mã hash SHA-256\"\n}",
