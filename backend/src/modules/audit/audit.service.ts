@@ -182,9 +182,14 @@ export class AuditService {
   }
 
   async findByEntity(entityType: string, entityId: string) {
+    const normalizedId = entityId?.trim();
+    if (!normalizedId || normalizedId === 'undefined' || normalizedId === 'null') {
+      return [];
+    }
+
     const query: Record<string, unknown> = {
       entityType: entityType === 'automation' ? { $in: ['automation', 'workflow'] } : entityType,
-      entityId,
+      entityId: normalizedId,
     };
     const logs = await this.auditLogModel
       .find(query)

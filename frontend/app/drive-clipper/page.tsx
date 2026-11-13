@@ -102,7 +102,7 @@ export default function DriveClipperPage() {
         createdCount: number;
         verifiedCount: number;
         tamperedCount: number;
-      }>('/google/drive/sync', { email: currentUser?.email }, { mockFallback: false });
+      }>('/google/drive/sync', { email: currentUser?.email }, { mockFallback: false, timeoutMs: 60_000 });
       toast.success(
         `Đã quét ${res.data.scannedFiles} file Drive: thêm mới ${res.data.createdCount}, nguyên vẹn ${res.data.verifiedCount}, cảnh báo ${res.data.tamperedCount}.`,
       );
@@ -120,7 +120,7 @@ export default function DriveClipperPage() {
       const res = await apiClient.post<{ sent: boolean; reason?: string }>(
         '/google/gmail/test',
         { email: status?.connectedEmail || currentUser?.email },
-        { mockFallback: false },
+        { mockFallback: false, timeoutMs: 25_000 },
       );
       if (res.data.sent) {
         toast.success('Đã gửi email kiểm tra qua Gmail thành công!');
@@ -154,7 +154,7 @@ export default function DriveClipperPage() {
           saveToDrive: true,
           notifyGmail,
         },
-        { mockFallback: false },
+        { mockFallback: false, timeoutMs: 30_000 },
       );
       toast.success(
         `AI (${res.data.classification.classifierMode}) đã phân loại [${res.data.classification.category}] & lưu thành công${res.data.driveSynced ? ' + đồng bộ Drive' : ''}!`,
