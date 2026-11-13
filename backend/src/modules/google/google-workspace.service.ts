@@ -192,6 +192,7 @@ export class GoogleWorkspaceService {
 
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {
@@ -227,6 +228,153 @@ export class GoogleWorkspaceService {
     return DocumentCategory.OPERATIONAL;
   }
 
+  private shouldSkipDriveFile(file: DriveFileItem): boolean {
+    const unsupportedTypes = new Set([
+      'application/vnd.google-apps.shortcut',
+      'application/vnd.google-apps.form',
+      'application/vnd.google-apps.map',
+      'application/vnd.google-apps.site',
+      'application/vnd.google-apps.jam',
+    ]);
+    if (unsupportedTypes.has(file.mimeType)) {
+      return true;
+    }
+    const maxBytes = 15 * 1024 * 1024;
+    if (file.size && Number(file.size) > maxBytes) {
+      this.logger.warn(`Bỏ qua tệp Drive quá lớn (>15MB): "${file.name}"`);
+      return true;
+    }
+    return false;
+  }
+
+  private async syncSingleDriveFile(
+    accessToken: string,
+    user: UserDocument,
+    file: DriveFileItem,
+  ): Promise<{
+    outcome: 'created' | 'verified' | 'tampered' | 'skipped';
+    tamperedDoc?: { title: string; expectedHash: string; actualHash: string };
+  }> {
+    if (this.shouldSkipDriveFile(file)) {
+      return { outcome: 'skipped' };
+    }
+
+    const { buffer, mimeType, fileName } = await this.downloadDriveFile(accessToken, file);
+    const currentHash = crypto.createHash('sha256').update(buffer).digest('hex');
+
+    const existing = await this.documentModel
+      .findOne({ driveFileId: file.id, status: { $ne: DocumentStatus.DELETED } })
+      .exec();
+
+    if (!existing) {
+      const safeBase = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const stamp = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const filePath = path.resolve(this.storageDir, `${stamp}-${safeBase}`);
+      const backupFilePath = path.resolve(this.backupDir, `${stamp}-${safeBase}.backup`);
+      fs.writeFileSync(filePath, buffer);
+      fs.writeFileSync(backupFilePath, buffer);
+
+      const doc = await this.documentModel.create({
+        title: file.name,
+        description: `Đồng bộ tự động từ Google Drive (${user.email})`,
+        originalFileName: fileName,
+        filePath,
+        backupFilePath,
+        backupHash: currentHash,
+        fileHash: currentHash,
+        mimeType,
+        fileSize: buffer.length,
+        category: this.inferCategoryFromName(file.name),
+        department: user.department || 'Google Drive',
+        status: DocumentStatus.ACTIVE,
+        healthScore: 100,
+        healthStatus: HealthStatus.HEALTHY,
+        integrityStatus: IntegrityStatus.INTACT,
+        lastIntegrityCheckAt: new Date(),
+        lastHealthScanAt: new Date(),
+        uploadedBy: user._id,
+        ownerEmail: user.email,
+        driveFileId: file.id,
+        tags: ['google-drive', 'synced'],
+        metadata: {
+          driveFileId: file.id,
+          driveWebViewLink: file.webViewLink,
+          driveModifiedTime: file.modifiedTime,
+          lastModifyingUser: file.lastModifyingUser?.emailAddress,
+        },
+      });
+
+      await this.versionModel.create({
+        documentId: doc._id,
+        versionNumber: 1,
+        filePath,
+        fileHash: currentHash,
+        fileSize: buffer.length,
+        mimeType,
+        changeReason: 'Đồng bộ khởi tạo từ Google Drive',
+        uploadedBy: user._id,
+      });
+
+      return { outcome: 'created' };
+    }
+
+    if (currentHash !== existing.fileHash) {
+      existing.integrityStatus = IntegrityStatus.TAMPERED;
+      existing.healthScore = 35;
+      existing.healthStatus = HealthStatus.CRITICAL;
+      existing.healthDeductions.push({
+        rule: 'INTEGRITY_TAMPERED',
+        reason: `Nội dung tệp trên Google Drive đã thay đổi ngoài luồng (người sửa: ${file.lastModifyingUser?.emailAddress || 'không rõ'})`,
+        pointsDeducted: 65,
+        detectedAt: new Date(),
+      });
+      existing.lastIntegrityCheckAt = new Date();
+      await existing.save();
+
+      const incidentCode = `INC-${Date.now().toString().slice(-6)}`;
+      await this.incidentModel.create({
+        incidentCode,
+        documentId: existing._id,
+        title: `Phát hiện sửa đổi trên Google Drive: ${existing.title}`,
+        severity: IncidentSeverity.CRITICAL,
+        type: IncidentType.INTEGRITY_VIOLATION,
+        status: IncidentStatus.OPEN,
+        description: `Hash trên Google Drive (${currentHash.slice(0, 16)}...) khác với bản niêm phong (${existing.fileHash.slice(0, 16)}...). Người sửa cuối: ${file.lastModifyingUser?.emailAddress || 'N/A'}`,
+        timeline: [
+          {
+            action: 'CREATED',
+            note: 'Phát hiện sai lệch SHA-256 khi đồng bộ Google Drive',
+            timestamp: new Date(),
+          },
+        ],
+      });
+
+      this.n8nClient
+        .triggerIncidentWorkflow({
+          documentId: existing._id.toString(),
+          title: existing.title,
+          expectedHash: existing.fileHash,
+          actualHash: currentHash,
+          source: 'google_drive_sync',
+          ownerEmail: user.email,
+        })
+        .catch(() => undefined);
+
+      return {
+        outcome: 'tampered',
+        tamperedDoc: {
+          title: existing.title,
+          expectedHash: existing.fileHash,
+          actualHash: currentHash,
+        },
+      };
+    }
+
+    existing.lastIntegrityCheckAt = new Date();
+    await existing.save();
+    return { outcome: 'verified' };
+  }
+
   async syncUserDrive(identifier?: { userId?: string; email?: string }) {
     const user = await this.resolveGoogleUser(identifier);
     if (!user) {
@@ -243,120 +391,27 @@ export class GoogleWorkspaceService {
     let tamperedCount = 0;
     const tamperedDocs: Array<{ title: string; expectedHash: string; actualHash: string }> = [];
 
-    for (const file of files) {
-      try {
-        const { buffer, mimeType, fileName } = await this.downloadDriveFile(accessToken, file);
-        const currentHash = crypto.createHash('sha256').update(buffer).digest('hex');
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < files.length; i += BATCH_SIZE) {
+      const batch = files.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (file) => {
+          try {
+            return await this.syncSingleDriveFile(accessToken, user, file);
+          } catch (err: any) {
+            this.logger.warn(`Bỏ qua tệp Drive "${file.name}": ${err?.message}`);
+            return { outcome: 'skipped' as const };
+          }
+        }),
+      );
 
-        const existing = await this.documentModel
-          .findOne({ driveFileId: file.id, status: { $ne: DocumentStatus.DELETED } })
-          .exec();
-
-        if (!existing) {
-          const safeBase = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-          const stamp = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-          const filePath = path.resolve(this.storageDir, `${stamp}-${safeBase}`);
-          const backupFilePath = path.resolve(this.backupDir, `${stamp}-${safeBase}.backup`);
-          fs.writeFileSync(filePath, buffer);
-          fs.writeFileSync(backupFilePath, buffer);
-
-          const doc = await this.documentModel.create({
-            title: file.name,
-            description: `Đồng bộ tự động từ Google Drive (${user.email})`,
-            originalFileName: fileName,
-            filePath,
-            backupFilePath,
-            backupHash: currentHash,
-            fileHash: currentHash,
-            mimeType,
-            fileSize: buffer.length,
-            category: this.inferCategoryFromName(file.name),
-            department: user.department || 'Google Drive',
-            status: DocumentStatus.ACTIVE,
-            healthScore: 100,
-            healthStatus: HealthStatus.HEALTHY,
-            integrityStatus: IntegrityStatus.INTACT,
-            lastIntegrityCheckAt: new Date(),
-            lastHealthScanAt: new Date(),
-            uploadedBy: user._id,
-            ownerEmail: user.email,
-            driveFileId: file.id,
-            tags: ['google-drive', 'synced'],
-            metadata: {
-              driveFileId: file.id,
-              driveWebViewLink: file.webViewLink,
-              driveModifiedTime: file.modifiedTime,
-              lastModifyingUser: file.lastModifyingUser?.emailAddress,
-            },
-          });
-
-          await this.versionModel.create({
-            documentId: doc._id,
-            versionNumber: 1,
-            filePath,
-            fileHash: currentHash,
-            fileSize: buffer.length,
-            mimeType,
-            changeReason: 'Đồng bộ khởi tạo từ Google Drive',
-            uploadedBy: user._id,
-          });
-
-          createdCount += 1;
-        } else if (currentHash !== existing.fileHash) {
-          existing.integrityStatus = IntegrityStatus.TAMPERED;
-          existing.healthScore = 35;
-          existing.healthStatus = HealthStatus.CRITICAL;
-          existing.healthDeductions.push({
-            rule: 'INTEGRITY_TAMPERED',
-            reason: `Nội dung tệp trên Google Drive đã thay đổi ngoài luồng (người sửa: ${file.lastModifyingUser?.emailAddress || 'không rõ'})`,
-            pointsDeducted: 65,
-            detectedAt: new Date(),
-          });
-          existing.lastIntegrityCheckAt = new Date();
-          await existing.save();
-
-          const incidentCode = `INC-${Date.now().toString().slice(-6)}`;
-          await this.incidentModel.create({
-            incidentCode,
-            documentId: existing._id,
-            title: `Phát hiện sửa đổi trên Google Drive: ${existing.title}`,
-            severity: IncidentSeverity.CRITICAL,
-            type: IncidentType.INTEGRITY_VIOLATION,
-            status: IncidentStatus.OPEN,
-            description: `Hash trên Google Drive (${currentHash.slice(0, 16)}...) khác với bản niêm phong (${existing.fileHash.slice(0, 16)}...). Người sửa cuối: ${file.lastModifyingUser?.emailAddress || 'N/A'}`,
-            timeline: [
-              {
-                action: 'CREATED',
-                note: 'Phát hiện sai lệch SHA-256 khi đồng bộ Google Drive',
-                timestamp: new Date(),
-              },
-            ],
-          });
-
+      for (const item of batchResults) {
+        if (item.outcome === 'created') createdCount += 1;
+        else if (item.outcome === 'verified') verifiedCount += 1;
+        else if (item.outcome === 'tampered') {
           tamperedCount += 1;
-          tamperedDocs.push({
-            title: existing.title,
-            expectedHash: existing.fileHash,
-            actualHash: currentHash,
-          });
-
-          this.n8nClient
-            .triggerIncidentWorkflow({
-              documentId: existing._id.toString(),
-              title: existing.title,
-              expectedHash: existing.fileHash,
-              actualHash: currentHash,
-              source: 'google_drive_sync',
-              ownerEmail: user.email,
-            })
-            .catch(() => undefined);
-        } else {
-          existing.lastIntegrityCheckAt = new Date();
-          await existing.save();
-          verifiedCount += 1;
+          if (item.tamperedDoc) tamperedDocs.push(item.tamperedDoc);
         }
-      } catch (err: any) {
-        this.logger.warn(`Bỏ qua tệp Drive "${file.name}": ${err?.message}`);
       }
     }
 
