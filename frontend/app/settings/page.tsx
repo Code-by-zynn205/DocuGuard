@@ -108,18 +108,38 @@ export default function SettingsPage() {
 
   useEffect(() => {
     let mounted = true;
-    void Promise.resolve().then(() => {
-      if (!mounted || typeof window === 'undefined') return;
-      const saved = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved) as Partial<DocuGuardSettings>;
-          setSettings((prev) => ({ ...prev, ...parsed }));
-        } catch {
-          // Bỏ qua nếu JSON lưu cục bộ không hợp lệ
+    const loadSettings = async () => {
+      if (typeof window !== 'undefined') {
+        const saved = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+        if (saved && mounted) {
+          try {
+            const parsed = JSON.parse(saved) as Partial<DocuGuardSettings>;
+            setSettings((prev) => ({ ...prev, ...parsed }));
+          } catch {
+            // Bỏ qua nếu JSON lưu cục bộ không hợp lệ
+          }
         }
       }
-    });
+
+      try {
+        const res = await apiClient.get<Partial<DocuGuardSettings>>('/settings', {
+          mockFallback: false,
+        });
+        if (mounted && res.data && typeof res.data === 'object') {
+          setSettings((prev) => {
+            const next = { ...prev, ...res.data };
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next));
+            }
+            return next;
+          });
+        }
+      } catch {
+        // Bỏ qua khi chạy chế độ offline/standalone
+      }
+    };
+
+    void loadSettings();
     return () => {
       mounted = false;
     };
