@@ -31,6 +31,7 @@ export const ROUTES = {
   RECOVERY: '/recovery',
   AUDIT_LOGS: '/audit-logs',
   AUTOMATION: '/automation',
+  DRIVE_CLIPPER: '/drive-clipper',
   SETTINGS: '/settings',
 } as const;
 
@@ -96,6 +97,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     href: ROUTES.AUTOMATION,
     icon: 'Workflow',
     description: 'Giám sát workflow n8n',
+    section: 'operations',
+  },
+  {
+    label: 'Drive & Clipper AI',
+    href: ROUTES.DRIVE_CLIPPER,
+    icon: 'Cloud',
+    description: 'Đồng bộ Google Drive & Smart Web Clipper',
     section: 'operations',
   },
   {

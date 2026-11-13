@@ -13,6 +13,7 @@ const PROTECTED_PREFIXES = [
   ROUTES.RECOVERY,
   ROUTES.AUDIT_LOGS,
   ROUTES.AUTOMATION,
+  ROUTES.DRIVE_CLIPPER,
   ROUTES.SETTINGS,
 ];
 
@@ -68,6 +69,7 @@ export const config = {
     '/recovery/:path*',
     '/audit-logs/:path*',
     '/automation/:path*',
+    '/drive-clipper/:path*',
     '/settings/:path*',
   ],
 };

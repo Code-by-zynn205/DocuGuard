@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   Activity,
   AlertTriangle,
+  Cloud,
   FileText,
   History,
   LayoutDashboard,
@@ -33,6 +34,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   ScrollText,
   History,
   Workflow,
+  Cloud,
   Settings,
 };
 
