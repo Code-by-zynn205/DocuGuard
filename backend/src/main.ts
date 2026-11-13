@@ -26,9 +26,12 @@ async function bootstrap() {
   // Tiền tố /api cho tất cả route (trừ /health — sẽ thành /api/health)
   app.setGlobalPrefix('api');
 
-  // CORS: cho phép frontend gọi API từ origin được cấu hình
+  // CORS: cho phép frontend gọi API từ origin được cấu hình (localhost & 127.0.0.1)
+  const allowedOrigins = Array.from(
+    new Set([appConfig.frontendOrigin, 'http://localhost:3000', 'http://127.0.0.1:3000']),
+  );
   app.enableCors({
-    origin: appConfig.frontendOrigin,
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });
