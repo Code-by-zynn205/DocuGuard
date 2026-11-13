@@ -1,0 +1,564 @@
+{
+  "name": "n8n flow automation email",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f2bba662-9353-4ccd-be3b-30e759af04bc",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "limit": 10,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "1OZ0K7Um5GNtKtXpWTedQ6ek4XIL3FWcY",
+            "mode": "list",
+            "cachedResultName": "01_INBOX",
+            "cachedResultUrl": "https://drive.google.com/drive/folders/1OZ0K7Um5GNtKtXpWTedQ6ek4XIL3FWcY"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        224,
+        0
+      ],
+      "id": "a1f2e808-9958-40d7-a672-c1b3d8dd8a7a",
+      "name": "Search files and folders",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Ur21iznf6C6noFWZ",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        432,
+        0
+      ],
+      "id": "462fcc64-e197-4a99-b31d-d9f00d6c03cd",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id}}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        656,
+        192
+      ],
+      "id": "1b0cba92-2d2f-4294-8853-482dde48c6f9",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Ur21iznf6C6noFWZ",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.2,
+      "position": [
+        848,
+        192
+      ],
+      "id": "3c9eaf0d-2e00-4d53-a93c-c8ffc340d8b1",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "amount": 15
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1072,
+        192
+      ],
+      "id": "6f6c9eb3-1fc2-4b92-9462-c21cd8f81eb7",
+      "name": "Wait",
+      "webhookId": "4825fc31-850c-4126-af40-babe6fa4a1ef"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawText = $input.first().json.text || '';\nlet result = {\n  category: 'OTHER',\n  confidence: 0.0,\n  reason: 'Không nhận diện được JSON',\n  fileId: $('Loop Over Items').first().json.id,\n  fileName: $('Loop Over Items').first().json.name\n};\n\ntry {\n  const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();\n  const parsed = JSON.parse(cleanJson);\n  result.category = parsed.category || 'OTHER';\n  result.confidence = parsed.confidence || 0.0;\n  result.reason = parsed.reason || '';\n} catch (e) {\n  result.reason = 'Lỗi cú pháp phản hồi AI';\n}\n\nreturn [{ json: result }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        192
+      ],
+      "id": "6e50d993-b02e-4f24-b346-95ed7b2a6b3b",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "INVOICE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "60ffe7c4-bd2d-43f6-b4b8-be19342edf3a"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "INVOICE"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "id": "1e9cb15a-6d2b-4df5-969f-a32dc15edc18",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "CONTRACT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CONTRACT"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.5,
+      "position": [
+        1888,
+        176
+      ],
+      "id": "3712c905-4515-4edd-8028-146996ac4935",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.fileId }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1hoxmlOcqhw5caiZ2guDhPIq2jfM_xRm5",
+          "mode": "list",
+          "cachedResultName": "02_INVOICE",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1hoxmlOcqhw5caiZ2guDhPIq2jfM_xRm5"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2240,
+        -336
+      ],
+      "id": "3df2c861-0b51-4bf7-942f-610df9ba6f0c",
+      "name": "Move file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Ur21iznf6C6noFWZ",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.fileId }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1BOEGkIeolnpgrPAfwgA16ezECTYEgsFo",
+          "mode": "list",
+          "cachedResultName": "03_CONTRACT",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1BOEGkIeolnpgrPAfwgA16ezECTYEgsFo"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2256,
+        -64
+      ],
+      "id": "235f9472-4835-4500-a553-551157c824a1",
+      "name": "Move file2",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Ur21iznf6C6noFWZ",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.fileId }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "14a1DsP1GoH92ssljQpcn8F34VZJKvZuE",
+          "mode": "list",
+          "cachedResultName": "04_REVIEW",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/14a1DsP1GoH92ssljQpcn8F34VZJKvZuE"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2176,
+        384
+      ],
+      "id": "724503a0-4715-428c-9a51-9917071a0cf7",
+      "name": "Move file3",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Ur21iznf6C6noFWZ",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "thuanht.23ite@vku.udn.vn",
+        "subject": "==⚠️ [Cảnh báo] File cần kiểm tra: {{ $('Code in JavaScript').first().json.fileName }}",
+        "message": "==Tài liệu {{ $('Code in JavaScript').first().json.fileName }} bị xếp vào loại {{ $('Code in JavaScript').first().json.category }}.\\nLý do: {{ $('Code in JavaScript').first().json.reason }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        384
+      ],
+      "id": "e84e4c44-ae06-428e-ba50-ecbaed9aeace",
+      "name": "Send a message",
+      "webhookId": "3abd846c-504d-4d73-9178-06197b530cbb",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "LKIdWmE1T3Hyw6fi",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Hãy phân tích nội dung văn bản tài liệu sau đây:\n{{ $json.text }}\n\nPhân loại tài liệu và trả về kết quả dưới định dạng JSON duy nhất, không kèm giải thích hay markdown code block:\n{\n  \"category\": \"INVOICE\" | \"CONTRACT\" | \"OTHER\",\n  \"confidence\": 0.0 - 1.0,\n  \"reason\": \"Lý do phân loại ngắn gọn\"\n}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1296,
+        192
+      ],
+      "id": "6432cdb5-60f5-4f54-b952-38eebd271578",
+      "name": "Basic LLM Chain",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1712,
+        720
+      ],
+      "id": "5b6c81d3-d27c-4d26-bf02-9315232a6dbf",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwen3.8-27b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1232,
+        400
+      ],
+      "id": "fe5c5ca8-7adf-4539-b1b1-607582d6c5a7",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "ilibw2QHnLukR7l0",
+          "name": "Groq account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Move file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Move file2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Move file3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move file3": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move file": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move file2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "51b8ff33-2a8a-4fae-ab2f-9fbe1dbe8268",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3e72f4e644534f11c9f7a3521b34089c267a8b60df3908b85bcb0a371420596f"
+  },
+  "nodeGroups": [],
+  "id": "cToNZ4KEBPriaxlN",
+  "tags": []
+}
