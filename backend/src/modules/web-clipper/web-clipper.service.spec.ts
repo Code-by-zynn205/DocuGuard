@@ -51,6 +51,25 @@ describe('WebClipperService - Unit Tests', () => {
     expect(result.document.tags).toContain('facebook');
     expect(mockDocModel.create).toHaveBeenCalledTimes(1);
     expect(mockVersionModel.create).toHaveBeenCalledTimes(1);
+    expect(mockN8nClient.triggerWebClipper).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourcePlatform: 'n8n-callback',
+        selectedText: expect.stringContaining('Hợp đồng dịch vụ phần mềm'),
+      }),
+    );
+  });
+
+  it('xử lý idempotent khi nhận callback từ n8n mà không lưu trùng hoặc lặp webhook', async () => {
+    const result = await service.clipAndSave({
+      selectedText: 'Kiểm thử luồng Smart Web Clipper AI từ n8n',
+      pageTitle: 'DocuGuard Automation Test',
+      sourcePlatform: 'n8n-callback',
+    });
+
+    expect((result as any).syncedFromN8n).toBe(true);
+    expect(mockDocModel.create).not.toHaveBeenCalled();
+    expect(mockVersionModel.create).not.toHaveBeenCalled();
+    expect(mockN8nClient.triggerWebClipper).not.toHaveBeenCalled();
   });
 
   it('phân loại đoạn text hóa đơn thuế từ Google', async () => {
