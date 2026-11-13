@@ -76,4 +76,11 @@ export class N8nClient {
   async triggerSafeRecovery(payload: Record<string, unknown>): Promise<void> {
     await this.postWebhook('safe-recovery', payload);
   }
+
+  /**
+   * Trigger workflow Smart Web Clipper (Google / Facebook)
+   */
+  async triggerWebClipper(payload: Record<string, unknown>): Promise<void> {
+    await this.postWebhook('web-clipper', payload);
+  }
 }
