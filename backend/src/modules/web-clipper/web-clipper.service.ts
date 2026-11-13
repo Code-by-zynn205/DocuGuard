@@ -27,10 +27,11 @@ export interface ClipRequestDto {
   selectedText: string;
   pageTitle?: string;
   sourceUrl?: string;
-  sourcePlatform?: 'google' | 'facebook' | 'web';
+  sourcePlatform?: 'google' | 'facebook' | 'web' | 'n8n-callback' | 'n8n-automation-test';
   userEmail?: string;
   saveToDrive?: boolean;
   notifyGmail?: boolean;
+  documentId?: string;
 }
 
 export interface AiClipClassification {
@@ -42,6 +43,15 @@ export interface AiClipClassification {
   isConfidential: boolean;
   expiresAt?: string | null;
   classifierMode: 'groq' | 'rule-engine';
+}
+
+export interface ClipSaveResult {
+  document: DocumentDocument | (Partial<Document> & { _id: string | null; title: string });
+  classification: AiClipClassification;
+  driveSynced: boolean;
+  driveWebViewLink?: string;
+  gmailNotified: boolean;
+  syncedFromN8n?: boolean;
 }
 
 const CATEGORY_DRIVE_FOLDERS: Record<DocumentCategory, string> = {
@@ -77,9 +87,11 @@ export class WebClipperService {
 
   private detectPlatform(
     sourceUrl?: string,
-    explicit?: 'google' | 'facebook' | 'web',
+    explicit?: string,
   ): 'google' | 'facebook' | 'web' {
-    if (explicit) return explicit;
+    if (explicit === 'google' || explicit === 'facebook' || explicit === 'web') {
+      return explicit;
+    }
     const url = (sourceUrl || '').toLowerCase();
     if (url.includes('facebook.com') || url.includes('fb.com') || url.includes('fb.watch')) {
       return 'facebook';
@@ -255,9 +267,33 @@ export class WebClipperService {
     }
   }
 
-  async clipAndSave(dto: ClipRequestDto) {
+  private isInternalN8nSync(platform?: string): boolean {
+    return platform === 'n8n-callback' || platform === 'n8n-automation-test';
+  }
+
+  async clipAndSave(dto: ClipRequestDto): Promise<ClipSaveResult> {
     if (!dto.selectedText || dto.selectedText.trim().length < 3) {
       throw new BadRequestException('Đoạn dữ liệu được chọn quá ngắn hoặc trống.');
+    }
+
+    // Yêu cầu đồng bộ từ n8n callback hoặc test Automation Center chỉ kiểm chứng payload,
+    // tránh lưu trùng tài liệu hoặc kích hoạt vòng lặp webhook vô hạn.
+    if (this.isInternalN8nSync(dto.sourcePlatform)) {
+      const classification = this.classifyByRules(
+        dto.selectedText,
+        dto.pageTitle,
+        dto.sourcePlatform || 'n8n-callback',
+      );
+      return {
+        document: {
+          _id: dto.documentId ?? null,
+          title: dto.pageTitle || classification.title,
+        },
+        classification,
+        driveSynced: false,
+        gmailNotified: false,
+        syncedFromN8n: true,
+      };
     }
 
     const platform = this.detectPlatform(dto.sourceUrl, dto.sourcePlatform);
@@ -411,11 +447,17 @@ export class WebClipperService {
       .triggerWebClipper({
         documentId: doc._id.toString(),
         title: doc.title,
+        pageTitle: dto.pageTitle || doc.title,
+        selectedText: dto.selectedText.trim().slice(0, 2000),
         category: aiResult.category,
         department: aiResult.department,
         platform,
-        sourceUrl: dto.sourceUrl,
+        sourcePlatform: 'n8n-callback',
+        sourceUrl: dto.sourceUrl || '',
+        userEmail: ownerEmail,
         ownerEmail,
+        saveToDrive: false,
+        notifyGmail: false,
         driveSynced: Boolean(driveUploadResult),
       })
       .catch(() => undefined);

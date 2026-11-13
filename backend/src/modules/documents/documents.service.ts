@@ -534,6 +534,18 @@ export class DocumentsService {
         severity: 'critical',
         description: `Cách ly tài liệu "${doc.title}" do nghi ngờ giả mạo / sai lệch toàn vẹn`,
       });
+
+      this.n8nClient
+        .triggerIncidentWorkflow({
+          documentId: doc._id.toString(),
+          title: `Cảnh báo cách ly tài liệu: ${doc.title}`,
+          description: `Tài liệu "${doc.title}" đã được chuyển sang trạng thái cách ly kiểm dịch (Quarantined).`,
+          severity: 'critical',
+          ownerEmail: doc.ownerEmail,
+        })
+        .catch((err) => {
+          this.logger.warn(`Không thể trigger n8n incident workflow khi cách ly: ${err?.message}`);
+        });
     }
 
     return doc;

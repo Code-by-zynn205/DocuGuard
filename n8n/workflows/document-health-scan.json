@@ -42,7 +42,7 @@
         "specifyBody": "json",
         "jsonBody": "={}",
         "options": {
-          "timeout": 15000
+          "timeout": 60000
         }
       },
       "id": "node-sync-google-drive",

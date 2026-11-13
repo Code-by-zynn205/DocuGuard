@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Model, type Connection } from 'mongoose';
+import { Model, Types, type Connection } from 'mongoose';
 import {
   AutomationLog,
   AutomationLogDocument,
@@ -16,18 +16,33 @@ import { HealthScannerService } from '../health-scanner/health-scanner.service.j
 export interface AutomationWorkflowRecord {
   _id: string;
   name: string;
+  workflowName?: string;
   workflowKey: string;
   workflowType: WorkflowType;
   description: string;
   isActive: boolean;
   webhookPath: string;
+  webhookUrl?: string;
   scheduleCron?: string;
   n8nWorkflowId?: string;
+  triggerSource?: string;
+  status?: string;
   lastRunAt?: string;
   lastStatus: 'success' | 'failed' | 'running' | 'idle';
   lastDurationMs?: number;
+  durationMs?: number;
+  startedAt?: string;
+  completedAt?: string;
   successCount: number;
   failureCount: number;
+  scannedDocumentsCount?: number;
+  healthyCount?: number;
+  warningCount?: number;
+  criticalCount?: number;
+  incidentsCreatedCount?: number;
+  notificationsSentCount?: number;
+  retryCount?: number;
+  successRate?: number;
 }
 
 const DEFAULT_WORKFLOWS: AutomationWorkflowRecord[] = [
@@ -115,6 +130,147 @@ export class AutomationService implements OnModuleInit {
     }
   }
 
+  private async findTargetDocument(
+    targetDocumentId?: string,
+    preferConfidential = false,
+  ): Promise<Record<string, any> | null> {
+    const docsCollection = this.connection.collection('documents');
+
+    if (targetDocumentId && Types.ObjectId.isValid(targetDocumentId)) {
+      const exactDoc = await docsCollection.findOne({
+        _id: new Types.ObjectId(targetDocumentId),
+        status: { $ne: 'deleted' },
+      });
+      if (exactDoc) {
+        return exactDoc as Record<string, any>;
+      }
+    }
+
+    if (preferConfidential) {
+      const confidentialDoc = await docsCollection.findOne(
+        { isConfidential: true, status: { $ne: 'deleted' } },
+        { sort: { updatedAt: -1 } },
+      );
+      if (confidentialDoc) {
+        return confidentialDoc as Record<string, any>;
+      }
+    }
+
+    const fallbackDoc = await docsCollection.findOne(
+      { status: { $ne: 'deleted' } },
+      { sort: { updatedAt: -1 } },
+    );
+    return (fallbackDoc as Record<string, any> | null) ?? null;
+  }
+
+  private async findDefaultOwnerEmail(): Promise<string> {
+    const usersCollection = this.connection.collection('users');
+    const googleUser = await usersCollection.findOne(
+      {
+        $or: [
+          { googleRefreshToken: { $exists: true, $ne: '' } },
+          { googleAccessToken: { $exists: true, $ne: '' } },
+        ],
+      },
+      { sort: { updatedAt: -1 } },
+    );
+    if (googleUser?.email) {
+      return String(googleUser.email);
+    }
+
+    const anyUser = await usersCollection.findOne({}, { sort: { updatedAt: -1 } });
+    return anyUser?.email ? String(anyUser.email) : 'admin@docuguard.io';
+  }
+
+  private mapWorkflowRecord(
+    wf: AutomationWorkflowRecord,
+    logs: AutomationLogDocument[],
+  ): AutomationWorkflowRecord {
+    const matchingLogs = logs.filter((l) => l.workflowType === wf.workflowType);
+    const latestLog = matchingLogs[0];
+    const successLogs = matchingLogs.filter(
+      (l) => l.status === WorkflowExecutionStatus.SUCCESS,
+    ).length;
+    const failedLogs = matchingLogs.filter(
+      (l) =>
+        l.status === WorkflowExecutionStatus.FAILED ||
+        l.status === WorkflowExecutionStatus.STUCK,
+    ).length;
+
+    const successCount = Math.max(wf.successCount ?? 0, successLogs);
+    const failureCount = Math.max(wf.failureCount ?? 0, failedLogs);
+    const totalRuns = successCount + failureCount;
+    const successRate =
+      totalRuns > 0 ? Number(((successCount / totalRuns) * 100).toFixed(1)) : 100;
+
+    const mappedStatus =
+      (latestLog?.status === WorkflowExecutionStatus.STUCK ||
+      latestLog?.status === WorkflowExecutionStatus.RETRYING
+        ? 'running'
+        : latestLog?.status) ??
+      wf.lastStatus ??
+      'idle';
+
+    const sumLogMetric = (
+      selector: (item: AutomationLogDocument) => number | undefined,
+    ) => matchingLogs.reduce((acc, item) => acc + (selector(item) ?? 0), 0);
+
+    const startedAt =
+      latestLog?.startedAt?.toISOString() ?? wf.lastRunAt ?? new Date().toISOString();
+    const completedAt = latestLog?.completedAt?.toISOString() ?? wf.lastRunAt;
+    const durationMs = latestLog?.durationMs ?? wf.lastDurationMs;
+
+    return {
+      _id: String(wf._id),
+      name: wf.name,
+      workflowName: wf.name,
+      workflowKey: wf.workflowKey,
+      workflowType: wf.workflowType,
+      description: wf.description,
+      isActive: Boolean(wf.isActive),
+      webhookPath: wf.webhookPath,
+      webhookUrl: wf.webhookPath,
+      scheduleCron: wf.scheduleCron,
+      n8nWorkflowId: wf.n8nWorkflowId,
+      triggerSource: latestLog?.triggerSource ?? (wf.scheduleCron ? 'cron' : 'manual'),
+      status: mappedStatus,
+      lastRunAt: startedAt,
+      lastStatus: mappedStatus,
+      lastDurationMs: durationMs,
+      durationMs,
+      startedAt,
+      completedAt,
+      successCount,
+      failureCount,
+      scannedDocumentsCount: Math.max(
+        wf.scannedDocumentsCount ?? 0,
+        sumLogMetric((l) => l.scannedDocumentsCount),
+      ),
+      healthyCount: Math.max(
+        wf.healthyCount ?? 0,
+        sumLogMetric((l) => l.healthyCount),
+      ),
+      warningCount: Math.max(
+        wf.warningCount ?? 0,
+        sumLogMetric((l) => l.warningCount),
+      ),
+      criticalCount: Math.max(
+        wf.criticalCount ?? 0,
+        sumLogMetric((l) => l.criticalCount),
+      ),
+      incidentsCreatedCount: Math.max(
+        wf.incidentsCreatedCount ?? 0,
+        sumLogMetric((l) => l.incidentsCreatedCount),
+      ),
+      notificationsSentCount: Math.max(
+        wf.notificationsSentCount ?? 0,
+        sumLogMetric((l) => l.notificationsSentCount),
+      ),
+      retryCount: 0,
+      successRate,
+    };
+  }
+
   async findAll(): Promise<AutomationWorkflowRecord[]> {
     let workflows = (await this.collection.find({}).toArray()) as unknown as AutomationWorkflowRecord[];
     if (workflows.length === 0) {
@@ -129,40 +285,7 @@ export class AutomationService implements OnModuleInit {
       .limit(100)
       .exec();
 
-    return workflows.map((wf) => {
-      const matchingLogs = logs.filter((l) => l.workflowType === wf.workflowType);
-      const latestLog = matchingLogs[0];
-      const successLogs = matchingLogs.filter(
-        (l) => l.status === WorkflowExecutionStatus.SUCCESS,
-      ).length;
-      const failedLogs = matchingLogs.filter(
-        (l) => l.status === WorkflowExecutionStatus.FAILED || l.status === WorkflowExecutionStatus.STUCK,
-      ).length;
-
-      return {
-        _id: String(wf._id),
-        name: wf.name,
-        workflowKey: wf.workflowKey,
-        workflowType: wf.workflowType,
-        description: wf.description,
-        isActive: Boolean(wf.isActive),
-        webhookPath: wf.webhookPath,
-        scheduleCron: wf.scheduleCron,
-        n8nWorkflowId: wf.n8nWorkflowId,
-        lastRunAt:
-          latestLog?.startedAt?.toISOString() ?? wf.lastRunAt,
-        lastStatus:
-          (latestLog?.status === WorkflowExecutionStatus.STUCK ||
-          latestLog?.status === WorkflowExecutionStatus.RETRYING
-            ? 'running'
-            : latestLog?.status) ??
-          wf.lastStatus ??
-          'idle',
-        lastDurationMs: latestLog?.durationMs ?? wf.lastDurationMs,
-        successCount: Math.max(wf.successCount ?? 0, successLogs),
-        failureCount: Math.max(wf.failureCount ?? 0, failedLogs),
-      };
-    });
+    return workflows.map((wf) => this.mapWorkflowRecord(wf, logs));
   }
 
   async toggleActive(id: string, isActive: boolean) {
@@ -189,7 +312,15 @@ export class AutomationService implements OnModuleInit {
     return list.find((item) => item._id === id);
   }
 
-  async triggerWorkflow(id: string, triggerSource = 'manual') {
+  private assertWebhookDelivered(delivered: boolean, webhookPath: string) {
+    if (delivered === false) {
+      throw new Error(
+        `Không thể gọi webhook n8n (${webhookPath}). Hãy kiểm tra workflow đã Publish/Active trên n8n.`,
+      );
+    }
+  }
+
+  async triggerWorkflow(id: string, triggerSource = 'manual', targetDocumentId?: string) {
     const wf = (await this.collection.findOne({ _id: id as any })) as unknown as AutomationWorkflowRecord | null;
     if (!wf) {
       throw new NotFoundException(`Không tìm thấy workflow: ${id}`);
@@ -198,6 +329,8 @@ export class AutomationService implements OnModuleInit {
     const startedAt = new Date();
     let success = true;
     let details: Record<string, unknown> = {};
+    let incidentsDelta = 0;
+    let notificationsDelta = 0;
 
     try {
       if (wf.workflowKey === 'document-health-scan' || wf.workflowType === WorkflowType.HEALTH_SCANNER) {
@@ -209,28 +342,81 @@ export class AutomationService implements OnModuleInit {
             tamperedCount: scanResult.tamperedCount,
           };
         } else {
-          await this.n8nClient.triggerHealthScan({ triggerSource, workflowId: id });
+          const delivered = await this.n8nClient.triggerHealthScan({ triggerSource, workflowId: id });
+          this.assertWebhookDelivered(delivered, wf.webhookPath);
+          details = { webhookDelivered: true };
         }
       } else if (wf.workflowKey === 'incident-resolution') {
-        await this.n8nClient.triggerIncidentWorkflow({
+        const targetDoc = await this.findTargetDocument(targetDocumentId, false);
+        const ownerEmail = targetDoc?.ownerEmail || (await this.findDefaultOwnerEmail());
+        const delivered = await this.n8nClient.triggerIncidentWorkflow({
           triggerSource,
           workflowId: id,
+          documentId: targetDoc ? String(targetDoc._id) : undefined,
+          title: targetDoc
+            ? `[Automation Test] Kiểm thử xử lý sự cố: ${targetDoc.title}`
+            : '[Automation Test] Kiểm thử điều phối sự cố hệ thống',
+          description: 'Kích hoạt kiểm thử workflow điều phối xử lý sự cố từ Automation Center',
+          severity: 'low',
+          ownerEmail,
           testRun: true,
         });
+        this.assertWebhookDelivered(delivered, wf.webhookPath);
+        incidentsDelta = 1;
+        notificationsDelta = 1;
+        details = {
+          documentId: targetDoc ? String(targetDoc._id) : null,
+          ownerEmail,
+          webhookDelivered: true,
+        };
       } else if (wf.workflowKey === 'safe-recovery') {
-        await this.n8nClient.triggerSafeRecovery({
+        const targetDoc = await this.findTargetDocument(targetDocumentId, true);
+        if (!targetDoc) {
+          throw new Error('Chưa có tài liệu nào trong Kho tài liệu để thực hiện Safe Recovery.');
+        }
+        const ownerEmail = targetDoc.ownerEmail || (await this.findDefaultOwnerEmail());
+        const delivered = await this.n8nClient.triggerSafeRecovery({
           triggerSource,
           workflowId: id,
+          documentId: String(targetDoc._id),
+          ownerEmail,
           testRun: true,
         });
+        this.assertWebhookDelivered(delivered, wf.webhookPath);
+        notificationsDelta = targetDoc.isConfidential ? 1 : 0;
+        details = {
+          documentId: String(targetDoc._id),
+          title: targetDoc.title,
+          isConfidential: Boolean(targetDoc.isConfidential),
+          webhookDelivered: true,
+        };
       } else if (wf.workflowKey === 'web-clipper') {
-        await this.n8nClient.triggerWebClipper({
+        const ownerEmail = await this.findDefaultOwnerEmail();
+        const delivered = await this.n8nClient.triggerWebClipper({
           triggerSource,
           workflowId: id,
-          testRun: true,
+          selectedText: 'Kiểm thử kết nối luồng Smart Web Clipper AI từ DocuGuard Automation Center',
+          pageTitle: 'DocuGuard Automation Verification',
+          sourceUrl: 'http://localhost:3000/automation',
+          sourcePlatform: 'n8n-automation-test',
+          userEmail: ownerEmail,
+          saveToDrive: false,
+          notifyGmail: false,
         });
+        this.assertWebhookDelivered(delivered, wf.webhookPath);
+        details = {
+          sourcePlatform: 'n8n-automation-test',
+          userEmail: ownerEmail,
+          webhookDelivered: true,
+        };
       } else {
-        await this.n8nClient.triggerHealthScan({ triggerSource, workflowId: id, monitorCheck: true });
+        const delivered = await this.n8nClient.triggerHealthScan({
+          triggerSource,
+          workflowId: id,
+          monitorCheck: true,
+        });
+        this.assertWebhookDelivered(delivered, wf.webhookPath);
+        details = { webhookDelivered: true };
       }
     } catch (error: any) {
       success = false;
@@ -252,6 +438,9 @@ export class AutomationService implements OnModuleInit {
         n8nWorkflowId: wf.n8nWorkflowId,
         triggerSource: validTrigger,
         status: success ? WorkflowExecutionStatus.SUCCESS : WorkflowExecutionStatus.FAILED,
+        incidentsCreatedCount: success ? incidentsDelta : 0,
+        notificationsSentCount: success ? notificationsDelta : 0,
+        errorDetails: success ? undefined : String(details?.error || ''),
         startedAt,
         completedAt,
         durationMs,
@@ -276,7 +465,11 @@ export class AutomationService implements OnModuleInit {
           lastStatus: success ? 'success' : 'failed',
           lastDurationMs: durationMs,
         },
-        $inc: success ? { successCount: 1 } : { failureCount: 1 },
+        $inc: {
+          ...(success ? { successCount: 1 } : { failureCount: 1 }),
+          ...(success && incidentsDelta ? { incidentsCreatedCount: incidentsDelta } : {}),
+          ...(success && notificationsDelta ? { notificationsSentCount: notificationsDelta } : {}),
+        },
       },
     );
 
