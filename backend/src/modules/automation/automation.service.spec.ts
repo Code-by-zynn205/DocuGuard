@@ -59,6 +59,8 @@ describe('AutomationService - n8n Workflow Triggers', () => {
       triggerIncidentWorkflow: vi.fn().mockResolvedValue(true),
       triggerSafeRecovery: vi.fn().mockResolvedValue(true),
       triggerWebClipper: vi.fn().mockResolvedValue(true),
+      triggerPdfClassify: vi.fn().mockResolvedValue(true),
+      triggerInvoiceAudit: vi.fn().mockResolvedValue(true),
     };
 
     service = new AutomationService(mockConnection, mockLogModel, mockN8nClient);
@@ -122,6 +124,48 @@ describe('AutomationService - n8n Workflow Triggers', () => {
 
     expect(result.success).toBe(false);
     expect(String(result.details?.error)).toContain('/webhook/incident-resolution');
+  });
+
+  it('gửi documentId thật khi kích hoạt PDF Classify & Auto-Rename', async () => {
+    workflowsCol.findOne.mockResolvedValue({
+      _id: 'wf-pdf-classify',
+      name: 'DocuGuard — Phân Loại PDF & Chuẩn Hóa Tên (AI)',
+      workflowKey: 'pdf-classify-rename',
+      workflowType: WorkflowType.WORKFLOW_MONITOR,
+      webhookPath: '/webhook/pdf-classify-rename',
+      isActive: true,
+    });
+
+    const result = await service.triggerWorkflow('wf-pdf-classify', 'manual');
+
+    expect(result.success).toBe(true);
+    expect(mockN8nClient.triggerPdfClassify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentId: '6af77f8846bf5f8c38e73823',
+        ownerEmail: 'vyltn.23ite@vku.udn.vn',
+      }),
+    );
+  });
+
+  it('gửi documentId hóa đơn khi kích hoạt Invoice AI Audit', async () => {
+    workflowsCol.findOne.mockResolvedValue({
+      _id: 'wf-invoice-audit',
+      name: 'DocuGuard — Kế Toán AI Bóc Tách & Kiểm Toán Hóa Đơn',
+      workflowKey: 'invoice-audit',
+      workflowType: WorkflowType.AUTO_REMEDIATION,
+      webhookPath: '/webhook/invoice-audit',
+      isActive: true,
+    });
+
+    const result = await service.triggerWorkflow('wf-invoice-audit', 'manual');
+
+    expect(result.success).toBe(true);
+    expect(mockN8nClient.triggerInvoiceAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentId: '6af77f8846bf5f8c38e73823',
+        ownerEmail: 'vyltn.23ite@vku.udn.vn',
+      }),
+    );
   });
 });
 

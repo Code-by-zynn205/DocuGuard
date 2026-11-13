@@ -1,0 +1,148 @@
+{
+  "name": "DocuGuard - PDF Metadata & Auto-Rename (AI)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pdf-classify-rename",
+        "responseMode": "responseNode",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-pdf-classify-webhook",
+      "name": "PDF Classify Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [160, 260],
+      "webhookId": "pdf-classify-rename"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst payload = raw.body ? raw.body : raw;\nreturn [{\n  json: {\n    documentId: payload.documentId || undefined,\n    rawText: payload.rawText || payload.text || undefined,\n    ownerEmail: payload.ownerEmail || payload.email || undefined,\n    title: payload.title || undefined\n  }\n}];"
+      },
+      "id": "node-normalize-pdf-input",
+      "name": "Normalize PDF Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [380, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://docuguard-server:3001/api/documents/pdf-classify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "node-call-pdf-classify",
+      "name": "Extract PDF Metadata & Rename",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 260],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-other-doc",
+              "leftValue": "={{ Boolean($json.needsReview) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-check-needs-review",
+      "name": "Check If Needs Manual Review",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [860, 260]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "node-respond-pdf-classify",
+      "name": "Respond PDF Classification",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 260]
+    }
+  ],
+  "connections": {
+    "PDF Classify Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize PDF Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize PDF Input": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Metadata & Rename",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Metadata & Rename": {
+      "main": [
+        [
+          {
+            "node": "Check If Needs Manual Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Needs Manual Review": {
+      "main": [
+        [
+          {
+            "node": "Respond PDF Classification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond PDF Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}
+

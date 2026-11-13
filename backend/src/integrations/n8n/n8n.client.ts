@@ -102,4 +102,18 @@ export class N8nClient {
   async triggerWebClipper(payload: Record<string, unknown>): Promise<boolean> {
     return this.postWebhook('web-clipper', payload);
   }
+
+  /**
+   * Trigger workflow Phân loại PDF & Chuẩn hóa tên file AI
+   */
+  async triggerPdfClassify(payload: Record<string, unknown>): Promise<boolean> {
+    return this.postWebhook('pdf-classify-rename', payload);
+  }
+
+  /**
+   * Trigger workflow Kế toán AI Bóc tách & Kiểm toán Hóa đơn
+   */
+  async triggerInvoiceAudit(payload: Record<string, unknown>): Promise<boolean> {
+    return this.postWebhook('invoice-audit', payload);
+  }
 }

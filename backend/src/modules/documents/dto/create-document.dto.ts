@@ -22,3 +22,11 @@ export class UpdateDocumentHealthDto {
     pointsDeducted: number;
   }>;
 }
+
+export class PdfIntelligenceRequestDto {
+  documentId?: string;
+  rawText?: string;
+  ownerEmail?: string;
+  title?: string;
+  simulateSuspicious?: boolean;
+}
