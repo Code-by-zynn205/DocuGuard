@@ -26,9 +26,13 @@ export class AutomationController {
   @Post(':id/trigger')
   async trigger(
     @Param('id') id: string,
-    @Body('triggerSource') triggerSource?: string,
+    @Body() body?: { triggerSource?: string; documentId?: string },
   ) {
-    return this.automationService.triggerWorkflow(id, triggerSource || 'manual');
+    return this.automationService.triggerWorkflow(
+      id,
+      body?.triggerSource || 'manual',
+      body?.documentId,
+    );
   }
 }
 

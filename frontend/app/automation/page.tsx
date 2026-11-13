@@ -17,7 +17,7 @@ import { StatCard } from '@/components/common/StatCard';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useApi } from '@/hooks/useApi';
-import { apiClient } from '@/lib/api';
+import { apiClient, normalizeApiError } from '@/lib/api';
 import type { AutomationWorkflow, WorkflowType } from '@/types';
 
 const WORKFLOW_TYPE_LABELS: Record<WorkflowType, string> = {
@@ -124,43 +124,74 @@ export default function AutomationPage() {
     }));
 
     try {
-      await apiClient.post(`/automation/${wf._id}/trigger`, {
-        triggerSource: 'manual',
+      if (isMock) {
+        await new Promise((r) => setTimeout(r, 900));
+        const endTime = new Date().toISOString();
+        const durationMs = 900;
+        setWorkflowOverrides((prev) => ({
+          ...prev,
+          [wf._id]: {
+            ...wf,
+            isActive: true,
+            status: 'success',
+            triggerSource: 'manual',
+            scannedDocumentsCount: (wf.scannedDocumentsCount ?? 0) + 3,
+            healthyCount: (wf.healthyCount ?? 0) + 3,
+            lastRunAt: endTime,
+            startedAt: startTime,
+            completedAt: endTime,
+            durationMs,
+            updatedAt: endTime,
+          },
+        }));
+        setBanner(
+          `Đã chạy mô phỏng "${wf.workflowName}" trong ${formatDuration(durationMs)}.`,
+        );
+        return;
+      }
+
+      const res = await apiClient.post<{
+        success: boolean;
+        workflow?: AutomationWorkflow;
+        details?: Record<string, unknown>;
+      }>(
+        `/automation/${wf._id}/trigger`,
+        { triggerSource: 'manual' },
+        { timeoutMs: 30_000 },
+      );
+
+      const triggerResult = res.data;
+      if (triggerResult?.workflow) {
+        setWorkflowOverrides((prev) => ({
+          ...prev,
+          [wf._id]: triggerResult.workflow!,
+        }));
+      }
+      await refetch();
+
+      if (triggerResult?.success === false) {
+        const errReason =
+          typeof triggerResult.details?.error === 'string' && triggerResult.details.error
+            ? triggerResult.details.error
+            : 'Kiểm tra workflow đã Publish/Active trên n8n chưa.';
+        setBanner(`Thực thi "${wf.workflowName}" chưa thành công: ${errReason}`);
+      } else {
+        setBanner(
+          `Đã thực thi thành công "${wf.workflowName}" (${formatDuration(triggerResult?.workflow?.durationMs)}).`,
+        );
+      }
+    } catch (error) {
+      setWorkflowOverrides((prev) => {
+        const next = { ...prev };
+        delete next[wf._id];
+        return next;
       });
-    } catch {
-      // Chế độ standalone mock chạy mô phỏng thực thi n8n
+      setBanner(
+        `Lỗi kích hoạt "${wf.workflowName}": ${normalizeApiError(error)}`,
+      );
+    } finally {
+      setTriggeringId(null);
     }
-
-    await new Promise((r) => setTimeout(r, 900));
-
-    const endTime = new Date().toISOString();
-    const durationMs = 900 + Math.floor(Math.random() * 1400);
-    const completedWorkflow: AutomationWorkflow = {
-      ...wf,
-      isActive: true,
-      status: 'success',
-      triggerSource: 'manual',
-      scannedDocumentsCount: wf.scannedDocumentsCount + 3,
-      healthyCount: wf.healthyCount + 3,
-      successRate: Math.min(
-        100,
-        Number(((wf.successRate ?? 98) + 0.1).toFixed(1)),
-      ),
-      lastRunAt: endTime,
-      startedAt: startTime,
-      completedAt: endTime,
-      durationMs,
-      updatedAt: endTime,
-    };
-
-    setWorkflowOverrides((prev) => ({
-      ...prev,
-      [wf._id]: completedWorkflow,
-    }));
-    setTriggeringId(null);
-    setBanner(
-      `Đã chạy thử thành công "${wf.workflowName}" trong ${formatDuration(durationMs)}.`,
-    );
   };
 
   return (
