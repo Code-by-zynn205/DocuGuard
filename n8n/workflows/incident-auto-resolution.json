@@ -1,5 +1,5 @@
 {
-  "name": "DocuGuard - Incident Auto-Resolution",
+  "name": "DocuGuard - Incident Auto-Resolution & Gmail Alert",
   "nodes": [
     {
       "parameters": {
@@ -14,18 +14,33 @@
       "name": "Incident Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [180, 260],
+      "position": [160, 260],
       "webhookId": "incident-resolution"
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst payload = raw.body ? raw.body : raw;\n\nconst isTampered = Boolean(payload.actualHash && payload.expectedHash && payload.actualHash !== payload.expectedHash);\nconst severity = isTampered ? 'critical' : (payload.severity || 'high');\nconst autoRecover = isTampered && Boolean(payload.documentId);\n\nreturn [{\n  json: {\n    ...payload,\n    severity,\n    autoRecover,\n    incidentTitle: payload.title || (isTampered ? `Cảnh báo vi phạm toàn vẹn: ${payload.documentId}` : 'Sự cố DocuGuard mới'),\n    incidentDescription: payload.description || (isTampered ? `Mã băm thực tế (${payload.actualHash}) không khớp mã băm gốc (${payload.expectedHash}). Kích hoạt tự động khôi phục an toàn.` : 'Phát hiện sự cố từ hệ thống giám sát.')\n  }\n}];"
+        "jsCode": "const raw = $input.first().json;\nconst payload = raw.body ? raw.body : raw;\n\nconst isTampered = Boolean(payload.actualHash && payload.expectedHash && payload.actualHash !== payload.expectedHash);\nconst severity = isTampered ? 'critical' : (payload.severity || 'high');\nconst autoRecover = isTampered && Boolean(payload.documentId);\n\nreturn [{\n  json: {\n    ...payload,\n    severity,\n    autoRecover,\n    incidentTitle: payload.title || (isTampered ? `Cảnh báo vi phạm toàn vẹn: ${payload.documentId}` : 'Sự cố DocuGuard mới'),\n    incidentDescription: payload.description || (isTampered ? `Mã băm thực tế (${payload.actualHash}) không khớp mã băm gốc (${payload.expectedHash}). Kích hoạt xử lý tự động & cảnh báo Gmail.` : 'Phát hiện sự cố từ hệ thống giám sát.')\n  }\n}];"
       },
       "id": "node-classify-incident",
       "name": "Classify & Prepare Incident",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [420, 260]
+      "position": [380, 260]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/audit-logs/entity/document/{{ $json.documentId }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "node-fetch-audit-context",
+      "name": "Fetch Recent Audit Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [600, 260],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -33,7 +48,7 @@
         "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/incidents",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"documentId\": \"{{ $json.documentId }}\",\n  \"title\": \"{{ $json.incidentTitle }}\",\n  \"description\": \"{{ $json.incidentDescription }}\",\n  \"severity\": \"{{ $json.severity }}\"\n}",
+        "jsonBody": "={\n  \"documentId\": \"{{ $('Classify & Prepare Incident').first().json.documentId }}\",\n  \"title\": \"{{ $('Classify & Prepare Incident').first().json.incidentTitle }}\",\n  \"description\": \"{{ $('Classify & Prepare Incident').first().json.incidentDescription }}\",\n  \"severity\": \"{{ $('Classify & Prepare Incident').first().json.severity }}\"\n}",
         "options": {
           "timeout": 10000
         }
@@ -42,7 +57,25 @@
       "name": "Register Incident in Backend",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 260],
+      "position": [820, 260],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/google/gmail/send",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"toEmail\": \"{{ $('Classify & Prepare Incident').first().json.ownerEmail || '' }}\",\n  \"subject\": \"[CRITICAL] DocuGuard Alert: {{ $('Classify & Prepare Incident').first().json.incidentTitle }}\",\n  \"htmlBody\": \"<div style='font-family:Arial,sans-serif;padding:16px;border:1px solid #fecdd3;border-radius:10px;'><h2 style='color:#be123c;'>Cảnh báo Sự cố Toàn vẹn Tài liệu</h2><p><b>Sự cố:</b> {{ $('Classify & Prepare Incident').first().json.incidentTitle }}</p><p><b>Mức độ:</b> {{ $('Classify & Prepare Incident').first().json.severity }}</p><p><b>Chi tiết:</b> {{ $('Classify & Prepare Incident').first().json.incidentDescription }}</p></div>\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "node-send-gmail-incident",
+      "name": "Send Gmail Urgent Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1040, 260],
       "onError": "continueRegularOutput"
     },
     {
@@ -71,7 +104,7 @@
       "name": "Check If Auto-Recover Needed",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [900, 260]
+      "position": [1260, 260]
     },
     {
       "parameters": {
@@ -88,20 +121,20 @@
       "name": "Execute Safe Recovery",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1140, 160],
+      "position": [1500, 160],
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"completed\",\n  \"incidentRegistered\": true,\n  \"autoRecoverTriggered\": {{ $('Classify & Prepare Incident').first().json.autoRecover }},\n  \"timestamp\": \"{{ $now.toISO() }}\"\n}",
+        "responseBody": "={\n  \"status\": \"completed\",\n  \"incidentRegistered\": true,\n  \"gmailAlertTriggered\": true,\n  \"autoRecoverTriggered\": {{ $('Classify & Prepare Incident').first().json.autoRecover }},\n  \"timestamp\": \"{{ $now.toISO() }}\"\n}",
         "options": {}
       },
       "id": "node-incident-respond",
       "name": "Respond to Incident Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1380, 260]
+      "position": [1720, 260]
     }
   ],
   "connections": {
@@ -120,6 +153,17 @@
       "main": [
         [
           {
+            "node": "Fetch Recent Audit Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Recent Audit Context": {
+      "main": [
+        [
+          {
             "node": "Register Incident in Backend",
             "type": "main",
             "index": 0
@@ -128,6 +172,17 @@
       ]
     },
     "Register Incident in Backend": {
+      "main": [
+        [
+          {
+            "node": "Send Gmail Urgent Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Gmail Urgent Alert": {
       "main": [
         [
           {

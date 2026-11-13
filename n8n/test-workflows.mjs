@@ -9,6 +9,7 @@ const workflows = [
   { file: 'document-health-scan.json', expectedWebhook: 'document-health-scan' },
   { file: 'incident-auto-resolution.json', expectedWebhook: 'incident-resolution' },
   { file: 'safe-recovery.json', expectedWebhook: 'safe-recovery' },
+  { file: 'web-clipper-ai.json', expectedWebhook: 'web-clipper' },
 ];
 
 console.log('🔍 Kiểm tra tính hợp lệ và toàn vẹn của các workflow n8n...\n');

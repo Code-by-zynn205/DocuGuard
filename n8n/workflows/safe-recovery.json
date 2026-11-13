@@ -1,5 +1,5 @@
 {
-  "name": "DocuGuard - Safe Recovery Approval & Execution",
+  "name": "DocuGuard - Safe Recovery Gmail 1-Click Approval",
   "nodes": [
     {
       "parameters": {
@@ -14,7 +14,7 @@
       "name": "Recovery Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [180, 260],
+      "position": [160, 260],
       "webhookId": "safe-recovery"
     },
     {
@@ -29,14 +29,14 @@
       "name": "Fetch Document Detail",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [420, 260]
+      "position": [400, 260]
     },
     {
       "parameters": {
         "conditions": {
           "boolean": [
             {
-              "value1": "={{ $json.isConfidential }}",
+              "value1": "={{ ($json.data ? $json.data.isConfidential : $json.isConfidential) }}",
               "value2": true
             }
           ]
@@ -46,12 +46,12 @@
       "name": "Is Confidential Document?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 260]
+      "position": [640, 260]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/documents/{{ $('Fetch Document Detail').first().json._id }}/recover",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/documents/{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data._id : $('Fetch Document Detail').first().json._id) }}/recover",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"reason\": \"n8n Safe Recovery: Tự động khôi phục tài liệu tiêu chuẩn từ bản sao lưu an toàn\"\n}",
@@ -63,29 +63,31 @@
       "name": "Execute Direct Recovery",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [940, 360]
+      "position": [920, 380],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/incidents",
+        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/recovery/request",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"documentId\": \"{{ $('Fetch Document Detail').first().json._id }}\",\n  \"title\": \"Yêu cầu phê duyệt khôi phục tài liệu mật: {{ $('Fetch Document Detail').first().json.title }}\",\n  \"description\": \"Tài liệu mật cần phê duyệt khôi phục. Đã gửi thông báo đến cấp thẩm quyền.\",\n  \"severity\": \"high\"\n}",
+        "jsonBody": "={\n  \"documentId\": \"{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data._id : $('Fetch Document Detail').first().json._id) }}\",\n  \"reason\": \"Yêu cầu phê duyệt 1-click qua Gmail cho tài liệu mật: {{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data.title : $('Fetch Document Detail').first().json.title) }}\"\n}",
         "options": {
           "timeout": 10000
         }
       },
       "id": "node-create-approval-task",
-      "name": "Create Approval Task in Backend",
+      "name": "Create Approval & Send Gmail 1-Click",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [940, 160]
+      "position": [920, 140],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"success\": true,\n  \"documentId\": \"{{ $('Fetch Document Detail').first().json._id }}\",\n  \"title\": \"{{ $('Fetch Document Detail').first().json.title }}\",\n  \"isConfidential\": {{ $('Fetch Document Detail').first().json.isConfidential }},\n  \"actionTaken\": \"{{ $('Is Confidential Document?').first().json.isConfidential ? 'APPROVAL_REQUESTED' : 'RECOVERED_SUCCESSFULLY' }}\",\n  \"timestamp\": \"{{ $now.toISO() }}\"\n}",
+        "responseBody": "={\n  \"success\": true,\n  \"documentId\": \"{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data._id : $('Fetch Document Detail').first().json._id) }}\",\n  \"title\": \"{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data.title : $('Fetch Document Detail').first().json.title) }}\",\n  \"isConfidential\": {{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data.isConfidential : $('Fetch Document Detail').first().json.isConfidential) }},\n  \"actionTaken\": \"{{ ($('Fetch Document Detail').first().json.data ? $('Fetch Document Detail').first().json.data.isConfidential : $('Fetch Document Detail').first().json.isConfidential) ? 'GMAIL_1CLICK_APPROVAL_SENT' : 'RECOVERED_SUCCESSFULLY' }}\",\n  \"timestamp\": \"{{ $now.toISO() }}\"\n}",
         "options": {}
       },
       "id": "node-respond-recovery",
@@ -122,7 +124,7 @@
       "main": [
         [
           {
-            "node": "Create Approval Task in Backend",
+            "node": "Create Approval & Send Gmail 1-Click",
             "type": "main",
             "index": 0
           }
@@ -147,7 +149,7 @@
         ]
       ]
     },
-    "Create Approval Task in Backend": {
+    "Create Approval & Send Gmail 1-Click": {
       "main": [
         [
           {
