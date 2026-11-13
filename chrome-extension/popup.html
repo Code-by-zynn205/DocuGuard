@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <title>DocuGuard Web Clipper AI</title>
+    <style>
+      body {
+        width: 340px;
+        margin: 0;
+        padding: 16px;
+        background: #0f172a;
+        color: #f8fafc;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      h1 {
+        font-size: 15px;
+        margin: 0 0 4px;
+        color: #38bdf8;
+      }
+      p.sub {
+        font-size: 11px;
+        color: #94a3b8;
+        margin: 0 0 12px;
+      }
+      label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        margin: 8px 0 4px;
+        color: #cbd5e1;
+      }
+      input[type="text"],
+      input[type="email"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #334155;
+        background: #020617;
+        color: #f8fafc;
+        font-size: 12px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        font-size: 12px;
+      }
+      button {
+        width: 100%;
+        margin-top: 12px;
+        padding: 9px 12px;
+        border: none;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #0284c7, #06b6d4);
+        color: #fff;
+        font-weight: 700;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #1e293b;
+        border: 1px solid #334155;
+      }
+      #status {
+        margin-top: 10px;
+        font-size: 11px;
+        color: #34d399;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🛡️ DocuGuard Web Clipper AI</h1>
+    <p class="sub">Bôi đen văn bản trên Google / Facebook để phân loại &amp; lưu tự động.</p>
+
+    <label for="userEmail">Gmail nhận &amp; đồng bộ Drive</label>
+    <input id="userEmail" type="email" placeholder="example@gmail.com" />
+
+    <label for="apiBaseUrl">DocuGuard Backend URL</label>
+    <input id="apiBaseUrl" type="text" value="http://localhost:3001" />
+
+    <div class="row">
+      <input id="saveToDrive" type="checkbox" checked />
+      <span>Tự động lưu vào Google Drive</span>
+    </div>
+    <div class="row">
+      <input id="notifyGmail" type="checkbox" />
+      <span>Luôn gửi Gmail tóm tắt khi lưu</span>
+    </div>
+
+    <button id="saveSettingsBtn" class="secondary">Lưu cấu hình</button>
+    <button id="clipActiveBtn">Phân loại &amp; Lưu đoạn đang bôi đen</button>
+    <div id="status"></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
+

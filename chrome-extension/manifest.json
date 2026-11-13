@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "DocuGuard Smart Web Clipper AI",
+  "version": "1.0.0",
+  "description": "Bôi đen đoạn dữ liệu khi lướt Google hoặc Facebook để AI tự động phân loại, niêm phong SHA-256 và lưu vào DocuGuard + Google Drive.",
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://localhost:3001/*",
+    "http://localhost:5678/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "DocuGuard Web Clipper AI"
+  }
+}
+
