@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as crypto from 'node:crypto';
@@ -16,8 +16,10 @@ import {
 import { DocumentVersion, DocumentVersionDocument } from '../../database/schemas/document-version.schema.js';
 import { Incident, IncidentDocument, IncidentSeverity, IncidentStatus, IncidentType } from '../../database/schemas/incident.schema.js';
 import { Recovery, RecoveryDocument, RecoveryStatus } from '../../database/schemas/recovery.schema.js';
+import { AuditAction, AuditEntityType } from '../../database/schemas/audit-log.schema.js';
 import { appConfig } from '../../config/app.config.js';
 import { N8nClient } from '../../integrations/n8n/n8n.client.js';
+import { AuditService } from '../audit/audit.service.js';
 import { CreateDocumentDto, UpdateDocumentHealthDto } from './dto/create-document.dto.js';
 
 @Injectable()
@@ -32,6 +34,7 @@ export class DocumentsService {
     @InjectModel(Incident.name) private readonly incidentModel: Model<IncidentDocument>,
     @InjectModel(Recovery.name) private readonly recoveryModel: Model<RecoveryDocument>,
     private readonly n8nClient: N8nClient,
+    @Optional() private readonly auditService?: AuditService,
   ) {
     this.storageDir = path.resolve(process.cwd(), appConfig.documentStoragePath);
     this.backupDir = path.resolve(this.storageDir, '..', 'backups');
@@ -229,6 +232,16 @@ export class DocumentsService {
       this.logger.warn(`Không thể trigger n8n health scan: ${err.message}`);
     });
 
+    await this.auditService?.logAction({
+      action: AuditAction.DOCUMENT_UPLOAD,
+      entityType: AuditEntityType.DOCUMENT,
+      entityId: doc._id,
+      entityName: doc.title,
+      actorName: 'Quản trị viên DocuGuard',
+      severity: 'info',
+      description: `Tải lên tài liệu mới "${doc.title}" (${doc.department})`,
+    });
+
     return doc;
   }
 
@@ -379,17 +392,32 @@ export class DocumentsService {
   async recover(id: string, reason?: string, userId?: string) {
     const doc = await this.findOne(id);
 
-    if (!fs.existsSync(doc.backupFilePath)) {
+    const localBackupPath = fs.existsSync(doc.backupFilePath)
+      ? doc.backupFilePath
+      : path.resolve(this.backupDir, path.basename(doc.backupFilePath || ''));
+
+    let backupHash = doc.backupHash || doc.fileHash;
+    let restoredSize = doc.fileSize;
+
+    if (fs.existsSync(localBackupPath)) {
+      const backupBuffer = fs.readFileSync(localBackupPath);
+      backupHash = crypto.createHash('sha256').update(backupBuffer).digest('hex');
+      const targetPath = doc.filePath.startsWith('/app/')
+        ? path.resolve(this.storageDir, path.basename(doc.filePath))
+        : doc.filePath;
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      fs.writeFileSync(targetPath, backupBuffer);
+      restoredSize = backupBuffer.length;
+    } else if (!doc.backupFilePath?.startsWith('/app/')) {
       throw new BadRequestException('Không tìm thấy bản sao lưu an toàn của tài liệu này trên máy chủ');
+    } else {
+      this.logger.warn(
+        `Không tìm thấy file backup vật lý (${localBackupPath}), khôi phục trạng thái bản ghi seeded cho ${doc.title}`,
+      );
     }
 
-    // Đọc tệp backup và khôi phục vào file gốc
-    const backupBuffer = fs.readFileSync(doc.backupFilePath);
-    const backupHash = crypto.createHash('sha256').update(backupBuffer).digest('hex');
-
-    fs.writeFileSync(doc.filePath, backupBuffer);
-
     doc.fileHash = backupHash;
+    doc.fileSize = restoredSize;
     doc.integrityStatus = IntegrityStatus.INTACT;
     doc.isMissing = false;
 
@@ -397,7 +425,7 @@ export class DocumentsService {
     const health = this.calculateHealthScore({
       description: doc.description,
       expiresAt: doc.expiresAt,
-      fileSize: backupBuffer.length,
+      fileSize: restoredSize,
       integrityStatus: IntegrityStatus.INTACT,
     });
     doc.healthScore = health.score;
@@ -416,7 +444,7 @@ export class DocumentsService {
         $set: {
           status: IncidentStatus.RESOLVED,
           resolvedAt: new Date(),
-          resolutionNotes: `Đã tự động khôi phục an toàn (Safe Recovery) từ bản sao lưu ${path.basename(doc.backupFilePath)}`,
+          resolutionNotes: `Đã tự động khôi phục an toàn (Safe Recovery) từ bản sao lưu ${path.basename(doc.backupFilePath || 'backup')}`,
         },
         $push: {
           timeline: {
@@ -430,7 +458,7 @@ export class DocumentsService {
 
     // Ghi nhật ký vào bảng Recovery
     const defaultUserId = userId ? new Types.ObjectId(userId) : doc.uploadedBy || new Types.ObjectId();
-    await this.recoveryModel.create({
+    const recovery = await this.recoveryModel.create({
       documentId: doc._id,
       status: RecoveryStatus.COMPLETED,
       reason: reason || 'Khôi phục an toàn 1-click sau khi phát hiện toàn vẹn dữ liệu bị xâm phạm',
@@ -441,10 +469,25 @@ export class DocumentsService {
       restoredAt: new Date(),
     });
 
+    const recoveryCode = `RCV-${recovery._id.toString().slice(-6).toUpperCase()}`;
+
+    await this.auditService?.logAction({
+      action: AuditAction.RECOVERY_EXECUTED,
+      entityType: AuditEntityType.DOCUMENT,
+      entityId: doc._id,
+      entityName: doc.title,
+      actorId: userId,
+      actorName: 'Quản trị viên DocuGuard',
+      severity: 'info',
+      description: `Khôi phục an toàn tài liệu "${doc.title}" (${recoveryCode})`,
+    });
+
     return {
       success: true,
+      recoveryCode,
       message: 'Khôi phục tài liệu thành công từ bản sao lưu an toàn!',
       document: doc,
+      recovery,
     };
   }
 
@@ -458,6 +501,20 @@ export class DocumentsService {
       else if (doc.healthScore < 80) doc.healthStatus = HealthStatus.WARNING;
       else doc.healthStatus = HealthStatus.HEALTHY;
     }
+    if (dto.integrityStatus) {
+      doc.integrityStatus = dto.integrityStatus as IntegrityStatus;
+      if (dto.integrityStatus === IntegrityStatus.TAMPERED && !dto.healthDeductions) {
+        const hasTamperRule = doc.healthDeductions.some((d) => d.rule === 'INTEGRITY_TAMPERED');
+        if (!hasTamperRule) {
+          doc.healthDeductions.push({
+            rule: 'INTEGRITY_TAMPERED',
+            reason: 'Tài liệu bị cách ly / gắn cờ xâm phạm toàn vẹn SHA-256',
+            pointsDeducted: Math.max(0, 100 - doc.healthScore),
+            detectedAt: new Date(),
+          });
+        }
+      }
+    }
     if (dto.healthDeductions) {
       doc.healthDeductions = dto.healthDeductions.map((d) => ({
         ...d,
@@ -466,16 +523,51 @@ export class DocumentsService {
     }
     doc.lastHealthScanAt = new Date();
     await doc.save();
+
+    if (dto.integrityStatus === IntegrityStatus.TAMPERED) {
+      await this.auditService?.logAction({
+        action: AuditAction.DOCUMENT_TAMPER_DETECTED,
+        entityType: AuditEntityType.DOCUMENT,
+        entityId: doc._id,
+        entityName: doc.title,
+        actorName: 'Quản trị viên DocuGuard',
+        severity: 'critical',
+        description: `Cách ly tài liệu "${doc.title}" do nghi ngờ giả mạo / sai lệch toàn vẹn`,
+      });
+    }
+
     return doc;
+  }
+
+  async softDelete(id: string) {
+    const doc = await this.findOne(id);
+    doc.status = DocumentStatus.DELETED;
+    await doc.save();
+
+    await this.auditService?.logAction({
+      action: AuditAction.DOCUMENT_DELETE,
+      entityType: AuditEntityType.DOCUMENT,
+      entityId: doc._id,
+      entityName: doc.title,
+      actorName: 'Quản trị viên DocuGuard',
+      severity: 'critical',
+      description: `Xóa mềm tài liệu "${doc.title}" khỏi kho hoạt động`,
+    });
+
+    return { deleted: true, id: doc._id.toString() };
   }
 
   async getFileStream(id: string) {
     const doc = await this.findOne(id);
-    if (!fs.existsSync(doc.filePath)) {
+    const localPath = fs.existsSync(doc.filePath)
+      ? doc.filePath
+      : path.resolve(this.storageDir, path.basename(doc.filePath || ''));
+
+    if (!fs.existsSync(localPath)) {
       throw new NotFoundException('Tệp vật lý không tồn tại');
     }
     return {
-      stream: fs.createReadStream(doc.filePath),
+      stream: fs.createReadStream(localPath),
       fileName: doc.originalFileName,
       mimeType: doc.mimeType,
     };

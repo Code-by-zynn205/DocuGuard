@@ -3,13 +3,13 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
   UseInterceptors,
   UploadedFile,
   Res,
-  HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
@@ -62,6 +62,11 @@ export class DocumentsController {
     @Body() dto: UpdateDocumentHealthDto,
   ) {
     return this.documentsService.updateHealth(id, dto);
+  }
+
+  @Delete(':id')
+  async softDelete(@Param('id') id: string) {
+    return this.documentsService.softDelete(id);
   }
 
   @Get(':id/download')

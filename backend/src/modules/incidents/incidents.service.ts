@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -9,6 +9,8 @@ import {
   IncidentType,
 } from '../../database/schemas/incident.schema.js';
 import { Document, DocumentDocument } from '../../database/schemas/document.schema.js';
+import { AuditAction, AuditEntityType } from '../../database/schemas/audit-log.schema.js';
+import { AuditService } from '../audit/audit.service.js';
 import { CreateIncidentDto, UpdateIncidentStatusDto } from './dto/create-incident.dto.js';
 
 @Injectable()
@@ -16,6 +18,7 @@ export class IncidentsService {
   constructor(
     @InjectModel(Incident.name) private readonly incidentModel: Model<IncidentDocument>,
     @InjectModel(Document.name) private readonly documentModel: Model<DocumentDocument>,
+    @Optional() private readonly auditService?: AuditService,
   ) {}
 
   async create(dto: CreateIncidentDto, userId?: string) {
@@ -57,6 +60,17 @@ export class IncidentsService {
       ],
     });
 
+    await this.auditService?.logAction({
+      action: AuditAction.INCIDENT_CREATED,
+      entityType: AuditEntityType.INCIDENT,
+      entityId: incident._id,
+      entityName: incident.incidentCode,
+      actorId: userId,
+      actorName: 'Hệ thống DocuGuard',
+      severity: severity === IncidentSeverity.CRITICAL ? 'critical' : 'warning',
+      description: `Tạo sự cố ${incident.incidentCode}: ${incident.title}`,
+    });
+
     return incident;
   }
 
@@ -68,7 +82,7 @@ export class IncidentsService {
 
     return this.incidentModel
       .find(filter)
-      .populate('documentId', 'title originalFileName healthScore healthStatus')
+      .populate('documentId', 'title originalFileName department isConfidential healthScore healthStatus')
       .populate('assignedTo', 'fullName email')
       .sort({ createdAt: -1 })
       .exec();
@@ -92,11 +106,19 @@ export class IncidentsService {
 
   async updateStatus(id: string, dto: UpdateIncidentStatusDto, userId?: string) {
     const incident = await this.findOne(id);
+    const normalizedStatus = String(dto.status).toLowerCase() as IncidentStatus;
+    const validStatus = Object.values(IncidentStatus).includes(normalizedStatus)
+      ? normalizedStatus
+      : incident.status;
 
-    incident.status = dto.status;
-    if (dto.status === IncidentStatus.RESOLVED || dto.status === IncidentStatus.CLOSED) {
+    const noteText = dto.resolutionNotes || dto.note;
+
+    incident.status = validStatus;
+    if (validStatus === IncidentStatus.RESOLVED || validStatus === IncidentStatus.CLOSED) {
       incident.resolvedAt = new Date();
-      if (dto.note) incident.resolutionNotes = dto.note;
+      if (noteText) incident.resolutionNotes = noteText;
+    } else if (noteText) {
+      incident.resolutionNotes = noteText;
     }
 
     if (dto.assignedTo && Types.ObjectId.isValid(dto.assignedTo)) {
@@ -105,12 +127,27 @@ export class IncidentsService {
 
     incident.timeline.push({
       action: 'STATUS_CHANGED',
-      note: dto.note || `Trạng thái cập nhật thành: ${dto.status}`,
+      note: noteText || `Trạng thái cập nhật thành: ${validStatus}`,
       performedBy: userId && Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : undefined,
       timestamp: new Date(),
     });
 
     await incident.save();
+
+    await this.auditService?.logAction({
+      action:
+        validStatus === IncidentStatus.RESOLVED || validStatus === IncidentStatus.CLOSED
+          ? AuditAction.INCIDENT_RESOLVED
+          : AuditAction.INCIDENT_STATUS_CHANGE,
+      entityType: AuditEntityType.INCIDENT,
+      entityId: incident._id,
+      entityName: incident.incidentCode,
+      actorId: userId,
+      actorName: 'Quản trị viên DocuGuard',
+      severity: 'info',
+      description: `Cập nhật sự cố ${incident.incidentCode} -> ${validStatus}${noteText ? `: ${noteText}` : ''}`,
+    });
+
     return incident;
   }
 

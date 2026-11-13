@@ -15,6 +15,7 @@ export class CreateDocumentDto {
 export class UpdateDocumentHealthDto {
   healthScore!: number;
   healthStatus?: 'healthy' | 'warning' | 'critical';
+  integrityStatus?: 'intact' | 'tampered' | 'missing';
   healthDeductions?: Array<{
     rule: string;
     reason: string;

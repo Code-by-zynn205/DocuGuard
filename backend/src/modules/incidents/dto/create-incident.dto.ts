@@ -12,5 +12,6 @@ export class CreateIncidentDto {
 export class UpdateIncidentStatusDto {
   status!: IncidentStatus;
   note?: string;
+  resolutionNotes?: string;
   assignedTo?: string;
 }
