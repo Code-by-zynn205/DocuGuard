@@ -30,7 +30,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_INTERNAL_URL || 'http://docuguard-server:3001' }}/api/web-clipper/clip",
+        "url": "http://docuguard-server:3001/api/web-clipper/clip",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
