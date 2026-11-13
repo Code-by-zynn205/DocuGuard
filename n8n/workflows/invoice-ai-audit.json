@@ -1,0 +1,148 @@
+{
+  "name": "DocuGuard - Invoice AI Audit & Fraud Check",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "invoice-audit",
+        "responseMode": "responseNode",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-invoice-webhook",
+      "name": "Invoice Audit Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [160, 260],
+      "webhookId": "invoice-audit"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst payload = raw.body ? raw.body : raw;\nreturn [{\n  json: {\n    documentId: payload.documentId || undefined,\n    rawText: payload.rawText || payload.text || undefined,\n    ownerEmail: payload.ownerEmail || payload.email || undefined,\n    simulateSuspicious: Boolean(payload.simulateSuspicious)\n  }\n}];"
+      },
+      "id": "node-normalize-invoice",
+      "name": "Normalize Invoice Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [380, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://docuguard-server:3001/api/documents/invoice-audit",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "node-call-invoice-audit",
+      "name": "AI Parse & Audit Invoice PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 260],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-suspicious-invoice",
+              "leftValue": "={{ Boolean($json.isSuspicious) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-check-suspicious",
+      "name": "Check If Invoice Suspicious",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [860, 260]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "node-respond-invoice",
+      "name": "Respond Invoice Audit",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 260]
+    }
+  ],
+  "connections": {
+    "Invoice Audit Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Invoice Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Invoice Payload": {
+      "main": [
+        [
+          {
+            "node": "AI Parse & Audit Invoice PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Parse & Audit Invoice PDF": {
+      "main": [
+        [
+          {
+            "node": "Check If Invoice Suspicious",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Invoice Suspicious": {
+      "main": [
+        [
+          {
+            "node": "Respond Invoice Audit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invoice Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}
+

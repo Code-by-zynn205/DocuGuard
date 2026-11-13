@@ -100,6 +100,34 @@ const DEFAULT_WORKFLOWS: AutomationWorkflowRecord[] = [
     successCount: 0,
     failureCount: 0,
   },
+  {
+    _id: 'wf-pdf-classify',
+    name: 'DocuGuard — Phân Loại PDF & Chuẩn Hóa Tên (AI)',
+    workflowKey: 'pdf-classify-rename',
+    workflowType: WorkflowType.WORKFLOW_MONITOR,
+    description:
+      'Đọc nội dung bên trong file PDF, bóc metadata (Loại, Công ty, Ngày), tự chuẩn hóa tên [Loai]_CongTy_Ngay.pdf và cảnh báo hồ sơ lạ.',
+    isActive: true,
+    webhookPath: '/webhook/pdf-classify-rename',
+    n8nWorkflowId: 'pdfClassifyRename',
+    lastStatus: 'idle',
+    successCount: 0,
+    failureCount: 0,
+  },
+  {
+    _id: 'wf-invoice-audit',
+    name: 'DocuGuard — Kế Toán AI Bóc Tách & Kiểm Toán Hóa Đơn',
+    workflowKey: 'invoice-audit',
+    workflowType: WorkflowType.AUTO_REMEDIATION,
+    description:
+      'Kế toán AI bóc nhà cung cấp, ngày chứng từ, tổng tiền VNĐ từ hóa đơn PDF, ghi sổ kiểm toán hoặc lập Incident khi phát hiện hóa đơn rủi ro.',
+    isActive: true,
+    webhookPath: '/webhook/invoice-audit',
+    n8nWorkflowId: 'invoiceAiAudit',
+    lastStatus: 'idle',
+    successCount: 0,
+    failureCount: 0,
+  },
 ];
 
 @Injectable()
@@ -119,11 +147,23 @@ export class AutomationService implements OnModuleInit {
     return this.connection.collection('automation_workflows');
   }
 
+  private async ensureDefaultWorkflows() {
+    for (const wf of DEFAULT_WORKFLOWS) {
+      await this.collection.updateOne(
+        { _id: wf._id as any },
+        { $setOnInsert: wf as any },
+        { upsert: true },
+      );
+    }
+  }
+
   async onModuleInit() {
     try {
       const count = await this.collection.countDocuments();
       if (count === 0) {
         await this.collection.insertMany(DEFAULT_WORKFLOWS as any[]);
+      } else if (count < DEFAULT_WORKFLOWS.length) {
+        await this.ensureDefaultWorkflows();
       }
     } catch (error: any) {
       this.logger.warn(`Không thể khởi tạo automation_workflows mặc định: ${error?.message}`);
@@ -133,6 +173,7 @@ export class AutomationService implements OnModuleInit {
   private async findTargetDocument(
     targetDocumentId?: string,
     preferConfidential = false,
+    preferFinancial = false,
   ): Promise<Record<string, any> | null> {
     const docsCollection = this.connection.collection('documents');
 
@@ -143,6 +184,22 @@ export class AutomationService implements OnModuleInit {
       });
       if (exactDoc) {
         return exactDoc as Record<string, any>;
+      }
+    }
+
+    if (preferFinancial) {
+      const financialDoc = await docsCollection.findOne(
+        {
+          status: { $ne: 'deleted' },
+          $or: [
+            { category: 'financial' },
+            { title: { $regex: 'hóa đơn|hoa don|invoice|vat', $options: 'i' } },
+          ],
+        },
+        { sort: { updatedAt: -1 } },
+      );
+      if (financialDoc) {
+        return financialDoc as Record<string, any>;
       }
     }
 
@@ -186,7 +243,9 @@ export class AutomationService implements OnModuleInit {
     wf: AutomationWorkflowRecord,
     logs: AutomationLogDocument[],
   ): AutomationWorkflowRecord {
-    const matchingLogs = logs.filter((l) => l.workflowType === wf.workflowType);
+    const matchingLogs = logs.filter((l) =>
+      l.workflowName ? l.workflowName === wf.name : l.workflowType === wf.workflowType,
+    );
     const latestLog = matchingLogs[0];
     const successLogs = matchingLogs.filter(
       (l) => l.status === WorkflowExecutionStatus.SUCCESS,
@@ -275,6 +334,9 @@ export class AutomationService implements OnModuleInit {
     let workflows = (await this.collection.find({}).toArray()) as unknown as AutomationWorkflowRecord[];
     if (workflows.length === 0) {
       await this.collection.insertMany(DEFAULT_WORKFLOWS as any[]);
+      workflows = (await this.collection.find({}).toArray()) as unknown as AutomationWorkflowRecord[];
+    } else if (workflows.length < DEFAULT_WORKFLOWS.length) {
+      await this.ensureDefaultWorkflows();
       workflows = (await this.collection.find({}).toArray()) as unknown as AutomationWorkflowRecord[];
     }
 
@@ -407,6 +469,37 @@ export class AutomationService implements OnModuleInit {
         details = {
           sourcePlatform: 'n8n-automation-test',
           userEmail: ownerEmail,
+          webhookDelivered: true,
+        };
+      } else if (wf.workflowKey === 'pdf-classify-rename') {
+        const targetDoc = await this.findTargetDocument(targetDocumentId, false, false);
+        const ownerEmail = targetDoc?.ownerEmail || (await this.findDefaultOwnerEmail());
+        const delivered = await this.n8nClient.triggerPdfClassify({
+          triggerSource,
+          workflowId: id,
+          documentId: targetDoc ? String(targetDoc._id) : undefined,
+          ownerEmail,
+        });
+        this.assertWebhookDelivered(delivered, wf.webhookPath);
+        details = {
+          documentId: targetDoc ? String(targetDoc._id) : null,
+          ownerEmail,
+          webhookDelivered: true,
+        };
+      } else if (wf.workflowKey === 'invoice-audit') {
+        const targetDoc = await this.findTargetDocument(targetDocumentId, false, true);
+        const ownerEmail = targetDoc?.ownerEmail || (await this.findDefaultOwnerEmail());
+        const delivered = await this.n8nClient.triggerInvoiceAudit({
+          triggerSource,
+          workflowId: id,
+          documentId: targetDoc ? String(targetDoc._id) : undefined,
+          ownerEmail,
+        });
+        this.assertWebhookDelivered(delivered, wf.webhookPath);
+        notificationsDelta = 1;
+        details = {
+          documentId: targetDoc ? String(targetDoc._id) : null,
+          ownerEmail,
           webhookDelivered: true,
         };
       } else {
