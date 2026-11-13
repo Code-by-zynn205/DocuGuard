@@ -64,6 +64,16 @@ export const appConfig = {
 
   // Thời gian sống Access Token (dạng số giây — trả về cho client)
   jwtAccessExpiresInSeconds: parseInt(process.env.JWT_ACCESS_EXPIRES_IN_SECONDS ?? '900', 10),
+
+  // ─── Google OAuth / Gmail / Google Drive ───────────────────────
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+  googleRedirectUri:
+    process.env.GOOGLE_REDIRECT_URI ?? 'http://localhost:3001/api/auth/google/callback',
+
+  // ─── Groq AI (Phân loại Smart Web Clipper & Incident Triage) ────
+  groqApiKey: process.env.GROQ_API_KEY ?? '',
+  groqModel: process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile',
 };
 
 // Kiểu TypeScript của config — dùng khi cần inject vào service

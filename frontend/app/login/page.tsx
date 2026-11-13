@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Eye,
@@ -49,6 +49,47 @@ function LoginFormContent() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const redirectTarget = getSafeRedirectTarget(searchParams.get('redirect'));
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const googleError = searchParams.get('googleError');
+    if (googleError) {
+      setErrorMsg(
+        googleError === 'missing_config'
+          ? 'Chưa cấu hình GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET trong backend/.env để đăng nhập Google.'
+          : `Đăng nhập Google thất bại (${googleError}).`,
+      );
+    }
+
+    const hash = window.location.hash;
+    if (hash && hash.startsWith('#googleAuth=')) {
+      try {
+        const b64 = hash.slice('#googleAuth='.length).replace(/-/g, '+').replace(/_/g, '/');
+        const json = decodeURIComponent(escape(window.atob(b64)));
+        const parsed = JSON.parse(json) as {
+          accessToken?: string;
+          user?: AuthSessionUser;
+        };
+        if (parsed.accessToken && parsed.user) {
+          setAuthSession(parsed.accessToken, parsed.user);
+          toast.success(
+            'Đăng nhập Google thành công',
+            `Đã liên kết Gmail ${parsed.user.email} & Google Drive`,
+          );
+          router.replace(redirectTarget);
+        }
+      } catch {
+        setErrorMsg('Không thể đọc dữ liệu xác thực Google.');
+      }
+    }
+  }, [redirectTarget, router, searchParams, toast]);
+
+  const handleGoogleLogin = () => {
+    const apiBase = (
+      process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+    ).replace(/\/+$/, '');
+    window.location.href = `${apiBase}/api/auth/google`;
+  };
 
   const completeLogin = (token: string, user: AuthSessionUser) => {
     setAuthSession(token, user);
@@ -226,6 +267,15 @@ function LoginFormContent() {
             >
               Đăng nhập hệ thống
             </Button>
+
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              className="flex h-10 w-full items-center justify-center gap-2.5 rounded-xl border border-slate-700 bg-slate-800/80 px-4 text-sm font-semibold text-white transition-all hover:border-cyan-500/60 hover:bg-slate-800 cursor-pointer"
+            >
+              <Mail className="h-4 w-4 text-cyan-400" aria-hidden="true" />
+              Đăng nhập bằng Google (Gmail &amp; Drive)
+            </button>
           </form>
 
           {/* Demo Quick Login Divider */}

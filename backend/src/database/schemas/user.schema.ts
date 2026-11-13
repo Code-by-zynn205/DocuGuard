@@ -54,6 +54,25 @@ export class User {
 
   @Prop({ type: String })
   refreshTokenHash?: string;
+
+  // Google OAuth / Gmail & Google Drive Integration
+  @Prop({ trim: true, index: true })
+  googleId?: string;
+
+  @Prop({ type: String })
+  googleAccessToken?: string;
+
+  @Prop({ type: String })
+  googleRefreshToken?: string;
+
+  @Prop({ type: Date })
+  googleTokenExpiresAt?: Date;
+
+  @Prop({ type: Date })
+  driveSyncedAt?: Date;
+
+  @Prop({ trim: true })
+  driveSyncFolderId?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

@@ -38,6 +38,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'node:crypto';
 import { User, UserDocument, UserRole } from '../../database/schemas/user.schema.js';
 import { AuditLog, AuditLogDocument, AuditAction, AuditEntityType } from '../../database/schemas/audit-log.schema.js';
 import { appConfig } from '../../config/app.config.js';
@@ -427,6 +428,107 @@ export class AuthService {
     return {
       message: `${action} tài khoản "${user.email}" thành công.`,
       isActive: newStatus,
+    };
+  }
+
+  /**
+   * Đăng nhập hoặc tự tạo tài khoản qua Google OAuth (Gmail + Google Drive)
+   */
+  async loginWithGoogle(
+    params: {
+      googleId: string;
+      email: string;
+      fullName: string;
+      avatarUrl?: string;
+      accessToken: string;
+      refreshToken?: string;
+      expiresIn?: number;
+    },
+    meta: RequestMeta,
+  ): Promise<AuthResponseDto> {
+    const normalizedEmail = params.email.toLowerCase().trim();
+    let user = await this.userModel.findOne({ email: normalizedEmail }).exec();
+
+    const expiresAt = params.expiresIn
+      ? new Date(Date.now() + params.expiresIn * 1000)
+      : new Date(Date.now() + 3600 * 1000);
+
+    if (!user) {
+      const randomSecret = crypto.randomBytes(32).toString('hex');
+      const passwordHash = await bcrypt.hash(randomSecret, this.PASSWORD_SALT_ROUNDS);
+      user = await this.userModel.create({
+        email: normalizedEmail,
+        passwordHash,
+        fullName: params.fullName || normalizedEmail.split('@')[0],
+        department: 'Google Workspace',
+        role: UserRole.ADMIN,
+        isActive: true,
+        avatarUrl: params.avatarUrl,
+        googleId: params.googleId,
+        googleAccessToken: params.accessToken,
+        ...(params.refreshToken ? { googleRefreshToken: params.refreshToken } : {}),
+        googleTokenExpiresAt: expiresAt,
+        lastLoginAt: new Date(),
+      });
+    } else {
+      if (!user.isActive) {
+        throw new UnauthorizedException('Tài khoản đã bị vô hiệu hóa.');
+      }
+      user.googleId = params.googleId;
+      user.googleAccessToken = params.accessToken;
+      if (params.refreshToken) {
+        user.googleRefreshToken = params.refreshToken;
+      }
+      user.googleTokenExpiresAt = expiresAt;
+      if (params.avatarUrl) {
+        user.avatarUrl = params.avatarUrl;
+      }
+      user.lastLoginAt = new Date();
+      await user.save();
+    }
+
+    const validatedUser: ValidatedUser = {
+      id: (user._id as { toString(): string }).toString(),
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      department: user.department,
+      isActive: user.isActive,
+    };
+
+    const tokens = await this.generateTokenPair(validatedUser);
+    await this.saveRefreshTokenHash(validatedUser.id, tokens.refreshToken);
+
+    await this.writeAuditLog({
+      action: AuditAction.AUTH_LOGIN,
+      entityType: AuditEntityType.USER,
+      entityId: validatedUser.id,
+      userId: validatedUser.id,
+      userEmail: validatedUser.email,
+      userRole: validatedUser.role,
+      meta,
+      status: 'success',
+      metadata: {
+        provider: 'google',
+        actorName: validatedUser.fullName,
+        description: `Đăng nhập bằng Gmail (${validatedUser.email}) & liên kết Google Drive`,
+      },
+    });
+
+    this.logger.log(`🔐 Đăng nhập Google OAuth thành công: ${validatedUser.email}`);
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresIn: appConfig.jwtAccessExpiresInSeconds,
+      user: {
+        id: validatedUser.id,
+        email: validatedUser.email,
+        fullName: validatedUser.fullName,
+        role: validatedUser.role,
+        department: validatedUser.department,
+        isActive: validatedUser.isActive,
+      },
     };
   }
 

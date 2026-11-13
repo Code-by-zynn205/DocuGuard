@@ -25,11 +25,13 @@ import {
   Param,
   UseGuards,
   Request,
+  Res,
   HttpCode,
   HttpStatus,
   Query,
 } from '@nestjs/common';
-import type { Request as ExpressRequest } from 'express';
+import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
+import { appConfig } from '../../config/app.config.js';
 import { AuthService } from './auth.service.js';
 import { LocalAuthGuard } from './guards/local-auth.guard.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
@@ -71,6 +73,114 @@ export class AuthController {
   ) {
     const meta = getClientMeta(req);
     return this.authService.login(req.user, meta);
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // GET /api/auth/google — Chuyển hướng tới trang cấp quyền Google (Gmail + Drive)
+  // ────────────────────────────────────────────────────────────────
+  @Get('google')
+  googleLogin(@Res() res: ExpressResponse) {
+    if (!appConfig.googleClientId || !appConfig.googleClientSecret) {
+      return res.redirect(`${appConfig.frontendOrigin}/login?googleError=missing_config`);
+    }
+
+    const scopes = [
+      'openid',
+      'email',
+      'profile',
+      'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/gmail.send',
+    ].join(' ');
+
+    const params = new URLSearchParams({
+      client_id: appConfig.googleClientId,
+      redirect_uri: appConfig.googleRedirectUri,
+      response_type: 'code',
+      scope: scopes,
+      access_type: 'offline',
+      prompt: 'consent',
+    });
+
+    return res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // GET /api/auth/google/callback — Nhận authorization code từ Google
+  // ────────────────────────────────────────────────────────────────
+  @Get('google/callback')
+  async googleCallback(
+    @Query('code') code: string | undefined,
+    @Query('error') error: string | undefined,
+    @Request() req: ExpressRequest,
+    @Res() res: ExpressResponse,
+  ) {
+    if (error || !code) {
+      return res.redirect(
+        `${appConfig.frontendOrigin}/login?googleError=${encodeURIComponent(error || 'access_denied')}`,
+      );
+    }
+
+    if (!appConfig.googleClientId || !appConfig.googleClientSecret) {
+      return res.redirect(`${appConfig.frontendOrigin}/login?googleError=missing_config`);
+    }
+
+    try {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: appConfig.googleClientId,
+          client_secret: appConfig.googleClientSecret,
+          redirect_uri: appConfig.googleRedirectUri,
+          grant_type: 'authorization_code',
+        }),
+      });
+
+      if (!tokenRes.ok) {
+        return res.redirect(`${appConfig.frontendOrigin}/login?googleError=token_exchange_failed`);
+      }
+
+      const tokenData = (await tokenRes.json()) as {
+        access_token: string;
+        refresh_token?: string;
+        expires_in?: number;
+      };
+
+      const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      });
+
+      if (!profileRes.ok) {
+        return res.redirect(`${appConfig.frontendOrigin}/login?googleError=userinfo_failed`);
+      }
+
+      const profile = (await profileRes.json()) as {
+        id: string;
+        email: string;
+        name?: string;
+        picture?: string;
+      };
+
+      const authResult = await this.authService.loginWithGoogle(
+        {
+          googleId: profile.id,
+          email: profile.email,
+          fullName: profile.name || profile.email,
+          avatarUrl: profile.picture,
+          accessToken: tokenData.access_token,
+          refreshToken: tokenData.refresh_token,
+          expiresIn: tokenData.expires_in,
+        },
+        getClientMeta(req),
+      );
+
+      const encoded = Buffer.from(JSON.stringify(authResult), 'utf-8').toString('base64url');
+      return res.redirect(`${appConfig.frontendOrigin}/login#googleAuth=${encoded}`);
+    } catch {
+      return res.redirect(`${appConfig.frontendOrigin}/login?googleError=oauth_exception`);
+    }
   }
 
   // ────────────────────────────────────────────────────────────────

@@ -190,6 +190,12 @@ export class Document {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: User.name, index: true })
   uploadedBy?: Types.ObjectId;
 
+  @Prop({ trim: true, lowercase: true, index: true })
+  ownerEmail?: string;
+
+  @Prop({ trim: true, index: true })
+  driveFileId?: string;
+
   @Prop({ type: [String], default: [] })
   tags!: string[];
 
