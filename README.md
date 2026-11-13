@@ -1,183 +1,119 @@
-# DocuGuard — Kho Tài Liệu Tự Giám Sát và Tự Phục Hồi
+# DocuGuard — Kho Tài Liệu Tự Giám Sát, Tự Phục Hồi & Smart Web Clipper AI
 
-> Nền tảng quản lý tài liệu doanh nghiệp có khả năng tự giám sát tình trạng tài liệu, phát hiện bất thường, đánh giá rủi ro, tự động điều phối xử lý sự cố qua n8n và hỗ trợ khôi phục tài liệu an toàn.
+> Nền tảng quản trị và bảo vệ toàn vẹn tài liệu doanh nghiệp / cá nhân: tự động giám sát SHA-256, phát hiện sự cố, điều phối xử lý qua n8n, phê duyệt **Safe Recovery 1-Click qua Gmail**, đồng bộ **Google Drive**, và thu thập phân loại thông minh từ **Google / Facebook** bằng **Groq AI**.
 
 ---
 
-## 📌 Báo Cáo Thiết Lập Nền Tảng Dự Án
+## 1. Tính năng cốt lõi (v1.0.0)
 
-### 1. Cấu trúc thư mục hiện tại
+- **Document Vault & Integrity Watch**: Quản lý tài liệu, băm SHA-256 theo từng phiên bản, sao lưu an toàn, cách ly tài liệu nghi ngờ giả mạo và xóa mềm.
+- **Health Scanner & Risk Radar**: Quét định kỳ/thủ công toàn bộ kho tài liệu, chấm điểm sức khỏe (`healthScore`), phát hiện tài liệu sắp hết hạn hoặc sai lệch toàn vẹn.
+- **Incident Center & Audit Logs**: Tự động tạo sự cố khi phát hiện sai lệch hash, ghi nhận toàn bộ nhật ký kiểm toán (`AuditLog`) trên toàn hệ thống.
+- **Safe Recovery 1-Click qua Gmail**: Phê duyệt khôi phục bản sao lưu an toàn trực tiếp từ email xác nhận gửi qua Gmail API.
+- **Google OAuth2 & Google Drive Sync**: Đăng nhập trực tiếp bằng Gmail và đồng bộ tài liệu từ Google Drive cá nhân vào DocuGuard.
+- **Smart Web Clipper AI + Chrome Extension (`chrome-extension/`)**: Bôi đen đoạn dữ liệu khi lướt Google Search hoặc Facebook → Groq AI (`llama-3.3-70b-versatile`) tự phân loại và lưu vào kho cá nhân + Google Drive + thông báo Gmail.
+- **Automation Center (n8n)**: 4 workflow tự động hóa trong `n8n/workflows/`:
+  - `document-health-scan.json`
+  - `incident-auto-resolution.json`
+  - `safe-recovery.json`
+  - `web-clipper-ai.json`
+
+---
+
+## 2. Cấu trúc dự án
 
 ```text
 DocuGuard/
-├── compose.yaml                          # Cấu hình Docker Compose cho client & server
-├── .gitignore                            # Git ignore gốc dự án
-├── README.md                             # Tài liệu tổng quan & báo cáo thiết lập
-├── docs/                                 # 9 tài liệu kiến trúc & hướng dẫn chi tiết
-│   ├── ARCHITECTURE.md                   # Kiến trúc hệ thống và luồng giao tiếp
-│   ├── PROJECT_STRUCTURE.md              # Cấu trúc chi tiết & giải thích NestJS
-│   ├── ENVIRONMENT_SETUP.md              # Hướng dẫn cấu hình biến môi trường
-│   ├── DOCKER_GUIDE.md                   # Vận hành Docker và quản lý container
-│   ├── FRONTEND_GUIDE.md                 # Hướng dẫn phát triển frontend Next.js
-│   ├── BACKEND_GUIDE.md                  # Hướng dẫn phát triển backend NestJS
-│   ├── MONGODB_GUIDE.md                  # Kết nối MongoDB & thiết kế Schema Mongoose
-│   ├── N8N_INTEGRATION_GUIDE.md          # Tích hợp workflow n8n và bảo mật webhook
-│   └── DEVELOPMENT_ROADMAP.md            # Lộ trình 10 giai đoạn phát triển
-├── backend/                              # NestJS (TypeScript NodeNext ESM)
+├── compose.yaml                      # Docker Compose chạy client (3000), server (3001), mongo-express (8081)
+├── .github/workflows/                # CI/CD kiểm thử và validate build
+├── backend/                          # NestJS 12 (TypeScript NodeNext ESM) + Mongoose
 │   ├── Dockerfile
-│   ├── .dockerignore
-│   ├── .env.example                      # Mẫu biến môi trường backend
-│   ├── nest-cli.json
-│   ├── package.json
-│   ├── tsconfig.json / tsconfig.build.json
+│   ├── .env.example                  # Mẫu biến môi trường (MongoDB, JWT, n8n, Google OAuth2, Groq AI)
 │   └── src/
-│       ├── main.ts                       # Entrypoint: Global Prefix /api, CORS, Filters, Interceptors
-│       ├── app.module.ts                 # Root Module tích hợp HealthModule
-│       ├── config/
-│       │   └── app.config.ts             # Quản lý tập trung các biến môi trường
-│       ├── common/
-│       │   ├── filters/
-│       │   │   └── http-exception.filter.ts # Bắt & chuẩn hóa lỗi HTTP format JSON thống nhất
-│       │   ├── interceptors/
-│       │   │   └── response.interceptor.ts  # Bọc dữ liệu trả về { success: true, data, timestamp }
-│       │   ├── decorators/               # Thư mục cho Custom Decorators
-│       │   ├── guards/                   # Thư mục cho Auth / API Key Guards
-│       │   └── pipes/                    # Thư mục cho Validation Pipes
-│       ├── database/
-│       │   └── database.module.ts        # Module Mongoose (sẵn sàng cho Giai đoạn 1)
-│       ├── modules/
-│       │   └── health/                   # Endpoint GET /api/health kiểm tra tình trạng hệ thống
-│       │       ├── health.module.ts
-│       │       ├── health.controller.ts
-│       │       └── health.service.ts
-│       └── integrations/
-│           └── n8n/                      # Kết nối n8n Webhook an toàn từ backend
-│               ├── n8n.module.ts
-│               └── n8n.client.ts
-└── frontend/                             # Next.js 16 (App Router, Tailwind CSS v4, TypeScript)
-    ├── Dockerfile
-    ├── .dockerignore
-    ├── .env.example                      # Mẫu biến môi trường frontend (NEXT_PUBLIC_API_URL)
-    ├── package.json
-    ├── next.config.ts
-    ├── tsconfig.json
-    ├── app/
-    │   ├── layout.tsx                    # Root Layout hỗ trợ font và CSS chung
-    │   ├── page.tsx                      # Root page (Redirect 307 -> /dashboard)
-    │   ├── globals.css
-    │   ├── dashboard/page.tsx            # Trang Dashboard cơ sở
-    │   ├── documents/                    # Document Vault
-    │   ├── health-scanner/               # Health Scanner
-    │   ├── incidents/                    # Incident Center
-    │   ├── recovery/                     # Safe Recovery
-    │   ├── audit-logs/                   # Audit Logs
-    │   ├── automation/                   # Automation Center
-    │   └── settings/                     # Settings
-    ├── components/
-    │   ├── layout/                       # Sidebar, Header
-    │   ├── common/                       # Các Card, Modal dùng chung
-    │   └── ui/                           # Button, Badge primitives
-    ├── lib/
-    │   └── api.ts                        # Client API tập trung gọi backend có Type-Safe
-    ├── hooks/
-    │   └── useApi.ts                     # Custom React Hook fetch dữ liệu (kèm loading, error)
-    ├── types/
-    │   └── index.ts                      # Types TypeScript định nghĩa Document, Incident, AuditLog...
-    └── constants/
-        └── index.ts                      # Định nghĩa ROUTES, NAV_ITEMS, màu sắc trạng thái...
+│       ├── main.ts                   # Global prefix /api, CORS, Filters & Interceptors
+│       ├── app.module.ts             # Kết nối đầy đủ các module hệ thống
+│       ├── config/app.config.ts      # Quản lý cấu hình tập trung từ biến môi trường
+│       ├── database/                 # Schemas Mongoose & seed.ts (admin@docuguard.io / Admin@123456)
+│       ├── integrations/n8n/         # N8nClient gọi webhook có xác thực X-DocuGuard-Secret
+│       └── modules/
+│           ├── audit/                # AuditModule — Nhật ký kiểm toán hệ thống
+│           ├── auth/                 # AuthModule — JWT, RBAC & Google OAuth2 callback
+│           ├── automation/           # AutomationModule — Quản lý & kích hoạt workflow n8n
+│           ├── dashboard/            # DashboardModule — Thống kê tổng quan & Risk Radar
+│           ├── documents/            # DocumentsModule — Kho tài liệu, hash SHA-256, soft-delete
+│           ├── google/               # GoogleModule — Google Drive Sync & Gmail Workspace
+│           ├── health/               # HealthModule — GET /api/health
+│           ├── health-scanner/       # HealthScannerModule — Quét sức khỏe & toàn vẹn tài liệu
+│           ├── incidents/            # IncidentsModule — Trung tâm xử lý sự cố
+│           ├── recovery/             # RecoveryModule — Khôi phục an toàn & duyệt 1-click Gmail
+│           ├── settings/             # SettingsModule — Chính sách hệ thống & webhook n8n
+│           └── web-clipper/          # WebClipperModule — Phân loại Groq AI & lưu dữ liệu web
+├── frontend/                         # Next.js 16 (App Router, Tailwind CSS v4, TypeScript)
+│   ├── Dockerfile
+│   ├── proxy.ts                      # Bảo vệ route & redirect chưa đăng nhập
+│   └── app/                          # dashboard, documents, drive-clipper, health-scanner,
+│                                     # incidents, recovery, audit-logs, automation, settings, login
+├── chrome-extension/                 # Extension Chrome bôi đen dữ liệu trên Google / Facebook
+└── n8n/                              # 4 workflow JSON & script kiểm thử test-workflows.mjs
 ```
 
 ---
 
-### 2. Các file nền tảng quan trọng đã thiết lập
+## 3. Cấu hình môi trường (`backend/.env`)
 
-- **`backend/src/config/app.config.ts`**: Quản lý tập trung mọi biến môi trường từ `process.env`.
-- **`backend/src/common/filters/http-exception.filter.ts`**: Chuẩn hóa định dạng lỗi toàn cục:
-  ```json
-  { "success": false, "statusCode": 404, "message": "...", "timestamp": "...", "path": "..." }
-  ```
-- **`backend/src/common/interceptors/response.interceptor.ts`**: Bọc toàn bộ phản hồi API thành công:
-  ```json
-  { "success": true, "data": { ... }, "timestamp": "..." }
-  ```
-- **`backend/src/modules/health/`**: Cung cấp endpoint `GET /api/health` kiểm tra sức khỏe hệ thống.
-- **`backend/src/integrations/n8n/n8n.client.ts`**: Cung cấp interface giao tiếp webhook với n8n, hỗ trợ xác thực header bí mật.
-- **`frontend/lib/api.ts`**: Thư viện client API chuẩn hoá, hỗ trợ bắt lỗi typed `ApiException`.
-- **`frontend/hooks/useApi.ts`**: Custom hook hỗ trợ tải dữ liệu bất đồng bộ kèm trạng thái loading/error.
+Sao chép `backend/.env.example` thành `backend/.env` và điền các khóa tích hợp:
+
+- **Cơ sở dữ liệu & n8n**:
+  - Chạy trực tiếp ngoài host: `MONGODB_URI=mongodb://127.0.0.1:27017/docuguard`, `N8N_BASE_URL=http://localhost:5678`
+  - Chạy trong Docker (`compose.yaml` cùng mạng `docuguard-network`): `MONGODB_URI=mongodb://mongodb:27017/docuguard`, `N8N_BASE_URL=http://n8n:5678`
+- **Google OAuth2 (Google Drive API + Gmail API)**:
+  - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI=http://localhost:3001/api/auth/google/callback`
+  - Authorized JavaScript origins: `http://localhost:3000`
+- **Groq AI (Smart Web Clipper)**:
+  - `GROQ_API_KEY`, `GROQ_MODEL=llama-3.3-70b-versatile`
 
 ---
 
-### 3. Cấu hình Docker & Môi trường
+## 4. Khởi động nhanh
 
-Hệ thống hoạt động trên Docker network ngoài: **`docuguard-network`**.
-
-| Dịch vụ | Tên Container | Cổng Host -> Container | Vai trò | Trạng thái |
-|---|---|---|---|---|
-| **Frontend** | `docuguard-client` | `3000:3000` | Next.js 16 App Router | Running |
-| **Backend** | `docuguard-server` | `3001:3001` | NestJS 12 ESM | Running |
-| **Database** | `mongodb` | `127.0.0.1:27017:27017` | MongoDB 8.2 | Running |
-| **Automation** | `n8n` | `127.0.0.1:5678:5678` | n8n (SQLite nội bộ) | Running |
-
----
-
-### 4. Kết quả kiểm tra thực tế
-
-- **Build Backend**: Biên dịch thành công với `nest build`.
-- **Build Frontend**: Biên dịch thành công với `next build`.
-- **API Health Check**:
-  ```bash
-  curl http://localhost:3001/api/health
-  ```
-  Phản hồi:
-  ```json
-  {
-    "success": true,
-    "data": {
-      "status": "ok",
-      "service": "docuguard-backend",
-      "version": "0.1.0",
-      "environment": "production",
-      "checks": {
-        "server": "ok",
-        "database": "not_checked",
-        "n8n": "not_checked"
-      }
-    },
-    "timestamp": "2026-10-12T16:23:17.264Z"
-  }
-  ```
-- **Frontend HTTP Check**:
-  - `GET http://localhost:3000/` trả về `307 Temporary Redirect` -> `/dashboard`
-  - `GET http://localhost:3000/dashboard` trả về `200 OK`
-
----
-
-### 5. Khởi động nhanh dự án
+### Chạy với Docker Compose
 
 ```bash
-# 1. Đảm bảo network và container nền đang chạy
+# 1. Đảm bảo network docuguard-network cùng container mongodb (27017) và n8n (5678) đang chạy
 docker network ls | grep docuguard-network
 docker ps | grep -E "mongodb|n8n"
 
-# 2. Khởi động ứng dụng
+# 2. Build và khởi động client & server
 docker compose up -d --build
 
-# 3. Xem log
-docker compose logs -f server
-docker compose logs -f client
+# 3. Nạp dữ liệu mẫu (nếu database trống)
+docker exec -it docuguard-server node dist/database/seed.js
+```
+
+### Kiểm thử thủ công trên máy dev
+
+```bash
+# Kiểm tra backend (type-check, build, vitest)
+cd backend && npx tsc --noEmit && npm run build && npm run test
+
+# Kiểm tra frontend (type-check, build)
+cd frontend && npx tsc --noEmit && npm run build
+
+# Kiểm tra hợp lệ 4 workflow n8n
+node n8n/test-workflows.mjs
 ```
 
 ---
 
-### 6. Lộ trình phát triển tiếp theo (10 Giai đoạn)
+## 5. Cài đặt Chrome Extension & n8n Workflows
 
-- **Giai đoạn 1**: Kết nối backend với MongoDB và hoàn thiện API kiểm tra sức khỏe hệ thống.
-- **Giai đoạn 2**: Xây dựng chức năng quản lý và upload tài liệu.
-- **Giai đoạn 3**: Xây dựng cơ chế hash SHA-256 và theo dõi phiên bản tài liệu.
-- **Giai đoạn 4**: Xây dựng Document Health Score và các quy tắc kiểm tra.
-- **Giai đoạn 5**: Tạo workflow n8n đầu tiên để kiểm tra tài liệu định kỳ.
-- **Giai đoạn 6**: Xây dựng Incident Center và quy trình xử lý sự cố.
-- **Giai đoạn 7**: Xây dựng cơ chế sao lưu và khôi phục tài liệu an toàn.
-- **Giai đoạn 8**: Xây dựng Audit Log và giám sát workflow.
-- **Giai đoạn 9**: Hoàn thiện giao diện quản trị và dashboard.
-- **Giai đoạn 10**: Kiểm thử, bảo mật và triển khai production.
+1. **n8n Workflows**: Truy cập `http://localhost:5678`, lần lượt **Import from File** 4 tệp trong `n8n/workflows/` và bật **Active**.
+2. **Chrome Extension**: Mở `chrome://extensions` → bật **Developer mode** → **Load unpacked** → chọn thư mục `chrome-extension/`.
+
+---
+
+## 6. Quy trình GitFlow của dự án
+
+- `main`: Nhánh phát hành ổn định (chỉ nhận merge qua Pull Request từ `develop`).
+- `develop`: Nhánh tích hợp các tính năng đã hoàn thiện.
+- `feat/*`, `fix/*`, `docs/*`: Nhánh công việc tách từ `develop`, tuân thủ Conventional Commits trước khi mở PR vào `develop`.
