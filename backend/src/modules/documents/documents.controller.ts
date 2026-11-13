@@ -14,11 +14,37 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { DocumentsService } from './documents.service.js';
-import { CreateDocumentDto, UpdateDocumentHealthDto } from './dto/create-document.dto.js';
+import { PdfIntelligenceService } from './pdf-intelligence.service.js';
+import {
+  CreateDocumentDto,
+  PdfIntelligenceRequestDto,
+  UpdateDocumentHealthDto,
+} from './dto/create-document.dto.js';
 
 @Controller('documents')
 export class DocumentsController {
-  constructor(private readonly documentsService: DocumentsService) {}
+  constructor(
+    private readonly documentsService: DocumentsService,
+    private readonly pdfIntelligenceService: PdfIntelligenceService,
+  ) {}
+
+  @Post('pdf-classify')
+  @UseInterceptors(FileInterceptor('file'))
+  async classifyAndRenamePdf(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() dto: PdfIntelligenceRequestDto,
+  ) {
+    return this.pdfIntelligenceService.classifyAndRenamePdf(file, dto);
+  }
+
+  @Post('invoice-audit')
+  @UseInterceptors(FileInterceptor('file'))
+  async auditInvoicePdf(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() dto: PdfIntelligenceRequestDto,
+  ) {
+    return this.pdfIntelligenceService.auditInvoicePdf(file, dto);
+  }
 
   @Post()
   @UseInterceptors(FileInterceptor('file'))

@@ -640,5 +640,75 @@ export class GoogleWorkspaceService {
       `,
     });
   }
+
+  /**
+   * Tải nội dung file trên Google Drive theo fileId (dùng cho phân tích nội dung PDF).
+   */
+  async downloadDriveFileById(
+    driveFileId: string,
+    identifier?: { userId?: string; email?: string },
+  ): Promise<Buffer | null> {
+    if (!driveFileId) {
+      return null;
+    }
+    try {
+      const user = await this.resolveGoogleUser(identifier);
+      if (!user) {
+        return null;
+      }
+      const accessToken = await this.getValidAccessToken(user);
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      if (!res.ok) {
+        return null;
+      }
+      return Buffer.from(await res.arrayBuffer());
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Đổi tên file trên Google Drive (an toàn, không ném lỗi nếu file nằm ngoài phạm vi drive.file).
+   */
+  async renameDriveFile(
+    driveFileId: string,
+    newName: string,
+    identifier?: { userId?: string; email?: string },
+  ): Promise<{ updated: boolean; reason?: string }> {
+    if (!driveFileId || !newName) {
+      return { updated: false, reason: 'Thiếu driveFileId hoặc tên mới' };
+    }
+    try {
+      const user = await this.resolveGoogleUser(identifier);
+      if (!user) {
+        return { updated: false, reason: 'Chưa có tài khoản Google OAuth kết nối' };
+      }
+      const accessToken = await this.getValidAccessToken(user);
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: newName }),
+          signal: AbortSignal.timeout(8_000),
+        },
+      );
+      if (!res.ok) {
+        return { updated: false, reason: `Google Drive API trả về ${res.status}` };
+      }
+      return { updated: true };
+    } catch (err: any) {
+      return { updated: false, reason: err?.message || 'Lỗi đổi tên trên Drive' };
+    }
+  }
 }
 

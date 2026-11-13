@@ -131,6 +131,7 @@ export default function DocumentsPage() {
     data: fetchedDocuments,
     loading,
     isMock,
+    refetch,
   } = useApi<Document[]>('/documents');
 
   // Quản lý bổ sung/cập nhật cục bộ (upload mới & cách ly) trên nền dữ liệu từ API
@@ -140,6 +141,7 @@ export default function DocumentsPage() {
   );
   const [copiedHashId, setCopiedHashId] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+  const [aiActionLoading, setAiActionLoading] = useState<'classify' | 'invoice' | null>(null);
   const [banner, setBanner] = useState<{
     type: 'success' | 'warning' | 'error';
     text: string;
@@ -287,6 +289,54 @@ export default function DocumentsPage() {
       type: 'warning',
       text: `Đã cách ly tài liệu "${doc.title}" vào vùng kiểm dịch (Quarantined).`,
     });
+  };
+
+  const handleRunPdfIntelligence = async (
+    doc: Document,
+    mode: 'classify' | 'invoice',
+  ) => {
+    setAiActionLoading(mode);
+    try {
+      const endpoint =
+        mode === 'classify' ? '/documents/pdf-classify' : '/documents/invoice-audit';
+      const res = await apiClient.post<Record<string, any>>(
+        endpoint,
+        { documentId: doc._id },
+        { timeoutMs: 30_000 },
+      );
+      const data = res.data;
+      await refetch();
+      setSelectedDoc(null);
+
+      if (mode === 'classify') {
+        const msg = `Chuẩn hóa thành "${String(data?.standardizedFileName ?? doc.originalFileName)}" (${String(data?.docType ?? 'PDF')})${data?.needsReview ? ' — Đã lập Incident cần rà soát' : ''}.`;
+        toast.success('Đã phân loại & chuẩn hóa tên PDF AI', msg);
+        setBanner({
+          type: data?.needsReview ? 'warning' : 'success',
+          text: msg,
+        });
+      } else {
+        const amount = Number(data?.totalAmount ?? 0).toLocaleString('vi-VN');
+        const msg = data?.isSuspicious
+          ? `Cảnh báo hóa đơn rủi ro từ ${String(data?.supplierName ?? 'NCC')} (${amount} VNĐ): ${String(data?.suspicionReason ?? '')}`
+          : `Đã nhập sổ hóa đơn ${String(data?.supplierName ?? 'NCC')} — ${amount} VNĐ vào Audit Logs.`;
+        if (data?.isSuspicious) {
+          toast.warning('Phát hiện hóa đơn rủi ro', msg);
+        } else {
+          toast.success('Kiểm toán hóa đơn thành công', msg);
+        }
+        setBanner({
+          type: data?.isSuspicious ? 'warning' : 'success',
+          text: msg,
+        });
+      }
+    } catch (error) {
+      const msg = normalizeApiError(error);
+      toast.error('Không thể chạy AI PDF', msg);
+      setBanner({ type: 'error', text: msg });
+    } finally {
+      setAiActionLoading(null);
+    }
   };
 
   const resetUploadModal = () => {
@@ -968,6 +1018,24 @@ export default function DocumentsPage() {
             <>
               <Button
                 variant="secondary"
+                loading={aiActionLoading === 'classify'}
+                disabled={aiActionLoading !== null}
+                onClick={() => void handleRunPdfIntelligence(selectedDoc, 'classify')}
+                leftIcon={<Sparkles className="h-4 w-4" />}
+              >
+                Chuẩn hóa tên PDF AI
+              </Button>
+              <Button
+                variant="primary"
+                loading={aiActionLoading === 'invoice'}
+                disabled={aiActionLoading !== null}
+                onClick={() => void handleRunPdfIntelligence(selectedDoc, 'invoice')}
+                leftIcon={<FileText className="h-4 w-4" />}
+              >
+                Kiểm toán Hóa đơn AI
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={() => handleDownload(selectedDoc)}
                 leftIcon={<Download className="h-4 w-4" />}
               >
@@ -1064,6 +1132,47 @@ export default function DocumentsPage() {
                 </p>
               </div>
             </div>
+
+            {Boolean(selectedDoc.metadata?.pdfClassification || selectedDoc.metadata?.invoiceAudit) && (
+              <div className="space-y-2 rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-3.5 text-xs">
+                <p className="font-semibold text-cyan-700 dark:text-cyan-300">
+                  Kết quả Phân tích &amp; Kiểm toán PDF AI
+                </p>
+                {Boolean(selectedDoc.metadata?.pdfClassification) && (() => {
+                  const meta = selectedDoc.metadata?.pdfClassification as Record<string, any>;
+                  return (
+                    <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 text-slate-600 dark:text-slate-300">
+                      <span>Loại chuẩn: <strong>{String(meta.docType ?? '—')}</strong></span>
+                      <span>Công ty: <strong>{String(meta.companyName ?? '—')}</strong></span>
+                      <span className="sm:col-span-2 font-mono">
+                        Tên chuẩn hóa: {String(meta.standardizedFileName ?? '—')}
+                      </span>
+                    </div>
+                  );
+                })()}
+                {Boolean(selectedDoc.metadata?.invoiceAudit) && (() => {
+                  const inv = selectedDoc.metadata?.invoiceAudit as Record<string, any>;
+                  return (
+                    <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 text-slate-600 dark:text-slate-300">
+                      <span>Nhà cung cấp: <strong>{String(inv.supplierName ?? '—')}</strong></span>
+                      <span>
+                        Tổng tiền:{' '}
+                        <strong>
+                          {Number(inv.totalAmount ?? 0).toLocaleString('vi-VN')} VNĐ
+                        </strong>
+                      </span>
+                      <span className="sm:col-span-2">
+                        Kiểm toán:{' '}
+                        <strong className={inv.isSuspicious ? 'text-rose-500' : 'text-emerald-600'}>
+                          {inv.isSuspicious ? '⚠️ Rủi ro / Nghi giả mạo' : '✅ Hợp lệ'}
+                        </strong>
+                        {inv.suspicionReason ? ` — ${String(inv.suspicionReason)}` : ''}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
 
             {selectedDoc.healthDeductions.length > 0 && (
               <div className="space-y-2">
