@@ -1,5 +1,8 @@
 # DocuGuard — Kho Tài Liệu Tự Giám Sát, Tự Phục Hồi & Smart Web Clipper AI
 
+[![DocuGuard CI Pipeline](https://github.com/Code-by-zynn205/DocuGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/Code-by-zynn205/DocuGuard/actions/workflows/ci.yml)
+[![DocuGuard CD Pipeline](https://github.com/Code-by-zynn205/DocuGuard/actions/workflows/cd.yml/badge.svg)](https://github.com/Code-by-zynn205/DocuGuard/actions/workflows/cd.yml)
+
 > Nền tảng quản trị và bảo vệ toàn vẹn tài liệu doanh nghiệp / cá nhân: tự động giám sát SHA-256, phát hiện sự cố, điều phối xử lý qua n8n, phê duyệt **Safe Recovery 1-Click qua Gmail**, đồng bộ **Google Drive**, và thu thập phân loại thông minh từ **Google / Facebook** bằng **Groq AI**.
 
 ---
