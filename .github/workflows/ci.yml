@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   n8n-workflows-validation:
-    name: ⚡ Validate n8n Workflows
+    name: Validate n8n Workflows
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -31,7 +31,7 @@ jobs:
         run: node n8n/test-workflows.mjs
 
   backend-ci:
-    name: 🛠️ Backend CI (Lint, Typecheck, Test, Build)
+    name: Backend CI (Typecheck, Test, Build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -60,7 +60,7 @@ jobs:
         run: npm run build
 
   frontend-ci:
-    name: 🎨 Frontend CI (Install, Build)
+    name: Frontend CI (Install, Build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -85,7 +85,7 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:3001
 
   docker-build-verification:
-    name: 🐳 Docker Container Build Verification
+    name: Docker Container Build Verification
     needs: [n8n-workflows-validation, backend-ci, frontend-ci]
     runs-on: ubuntu-latest
     steps:
