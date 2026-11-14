@@ -9,7 +9,7 @@ on:
 
 jobs:
   deploy-preparation:
-    name: 🚀 Production Release & Deployment
+    name: Production Release & Deployment
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
